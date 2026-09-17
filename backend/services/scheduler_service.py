@@ -204,7 +204,7 @@ def run_multi_simulation(pipeline_ids: list, algorithm: str, db: Session):
     except ValueError:
         algo_enum = Algorithm.FCFS
 
-    metrics = run_pipeline(combined, sched_runners, algo_enum, speed_multiplier=5.0)
+    metrics = run_pipeline(combined, sched_runners, algo_enum, speed_multiplier=1.0)
 
     if "error" in metrics:
         return {"error": metrics["error"], "message": metrics.get("message")}
