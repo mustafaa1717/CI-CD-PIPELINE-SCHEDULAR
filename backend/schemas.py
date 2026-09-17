@@ -20,7 +20,7 @@ class Task(TaskBase):
     status: str
     
     class Config:
-        orm_mode = True
+        from_attributes = True
         
 class PipelineBase(BaseModel):
     name: str
@@ -35,7 +35,7 @@ class Pipeline(PipelineBase):
     tasks: List[Task] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class RunnerBase(BaseModel):
     name: str
@@ -50,7 +50,7 @@ class Runner(RunnerBase):
     is_busy: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class RunRequest(BaseModel):
     algorithm: str
@@ -69,7 +69,7 @@ class TaskExecution(TaskExecutionBase):
     run_id: int
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class PipelineRunBase(BaseModel):
     pipeline_id: int
@@ -86,7 +86,7 @@ class PipelineRun(PipelineRunBase):
     task_executions: List[TaskExecution] = []
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ComparisonMetrics(BaseModel):
     algorithm: str
