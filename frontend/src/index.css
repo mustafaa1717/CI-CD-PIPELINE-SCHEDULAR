@@ -1,8 +1,15 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0f172a;
+  --color-card: #1e293b;
+  --color-accent: #6366f1;
+}
 
 body {
-  @apply bg-background text-white m-0 p-0;
+  background-color: #0f172a;
+  color: white;
+  margin: 0;
+  padding: 0;
   font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
