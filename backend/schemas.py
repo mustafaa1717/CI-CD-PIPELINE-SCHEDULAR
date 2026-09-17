@@ -9,7 +9,7 @@ class TaskBase(BaseModel):
     priority: int
     required_cpu: float
     required_ram: float
-    depends_on: List[int] = []
+    depends_on: List[str] = []  # Task names as dependencies
 
 class TaskCreate(TaskBase):
     pass

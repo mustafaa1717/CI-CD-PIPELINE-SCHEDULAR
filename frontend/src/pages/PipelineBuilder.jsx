@@ -1,15 +1,13 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { createPipeline } from '../services/api';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import {
   ReactFlow,
+  ReactFlowProvider,
   MiniMap,
   Controls,
   Background,
-  useNodesState,
-  useEdgesState,
-  addEdge,
   MarkerType
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -18,150 +16,140 @@ export default function PipelineBuilder() {
   const [name, setName] = useState('');
   const [tasks, setTasks] = useState([]);
   
-  // Task Form State
   const [taskName, setTaskName] = useState('');
   const [duration, setDuration] = useState('');
-  const [priority, setPriority] = useState(1);
+  const [priority, setPriority] = useState(5);
   const [cpu, setCpu] = useState(1);
-  const [ram, setRam] = useState(1);
+  const [ram, setRam] = useState(2);
   const [dependsOn, setDependsOn] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
 
   const handleAddTask = (e) => {
     e.preventDefault();
-    if (!taskName) return;
+    if (!taskName.trim()) return;
     
     const newTask = {
-      name: taskName,
+      name: taskName.trim(),
       duration: Number(duration),
       priority: Number(priority),
-      cpu_required: Number(cpu),
-      ram_required: Number(ram),
-      depends_on: dependsOn
+      required_cpu: Number(cpu),
+      required_ram: Number(ram),
+      depends_on: [...dependsOn]
     };
     
-    setTasks([...tasks, newTask]);
-    
-    // reset form
+    setTasks(prev => [...prev, newTask]);
     setTaskName('');
     setDuration('');
-    setPriority(1);
+    setPriority(5);
     setCpu(1);
-    setRam(1);
+    setRam(2);
     setDependsOn([]);
   };
 
   const toggleDependency = (depName) => {
-    if (dependsOn.includes(depName)) {
-      setDependsOn(dependsOn.filter(d => d !== depName));
-    } else {
-      setDependsOn([...dependsOn, depName]);
-    }
+    setDependsOn(prev =>
+      prev.includes(depName) ? prev.filter(d => d !== depName) : [...prev, depName]
+    );
   };
 
   const handleSavePipeline = async () => {
-    if (!name) {
-      toast.error("Pipeline needs a name");
-      return;
-    }
-    if (tasks.length === 0) {
-      toast.error("Add at least one task");
-      return;
-    }
+    if (!name.trim()) { toast.error('Pipeline needs a name'); return; }
+    if (tasks.length === 0) { toast.error('Add at least one task'); return; }
     
+    setLoading(true);
     try {
-      await createPipeline({ name, tasks });
-      toast.success("Pipeline created successfully!");
+      await createPipeline({ name: name.trim(), tasks });
+      toast.success('Pipeline created!');
       navigate('/');
     } catch (err) {
       console.error(err);
-      toast.error(err.response?.data?.detail || "Failed to create pipeline");
+      const detail = err.response?.data?.detail;
+      toast.error(typeof detail === 'string' ? detail : 'Failed to create pipeline');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Generate nodes and edges for React Flow
-  const nodes = useMemo(() => {
-    return tasks.map((t, idx) => ({
-      id: t.name,
-      position: { x: (idx % 3) * 200 + 50, y: Math.floor(idx / 3) * 150 + 50 },
-      data: { label: `${t.name} (${t.duration}s)` },
-      style: { background: '#1e293b', color: 'white', border: '1px solid #6366f1', borderRadius: '8px', padding: '10px' }
-    }));
-  }, [tasks]);
+  const nodes = useMemo(() => tasks.map((t, idx) => ({
+    id: t.name,
+    position: { x: (idx % 3) * 220 + 50, y: Math.floor(idx / 3) * 160 + 50 },
+    data: { label: `${t.name}\n(${t.duration}s | P${t.priority})` },
+    style: {
+      background: '#1e293b', color: 'white',
+      border: '1px solid #6366f1', borderRadius: '8px', padding: '10px',
+      fontSize: '12px', whiteSpace: 'pre-line', textAlign: 'center'
+    }
+  })), [tasks]);
 
   const edges = useMemo(() => {
-    const newEdges = [];
+    const result = [];
     tasks.forEach(t => {
-      t.depends_on.forEach(dep => {
-        newEdges.push({
+      (t.depends_on || []).forEach(dep => {
+        result.push({
           id: `e-${dep}-${t.name}`,
-          source: dep,
-          target: t.name,
+          source: dep, target: t.name,
           animated: true,
           style: { stroke: '#6366f1' },
           markerEnd: { type: MarkerType.ArrowClosed, color: '#6366f1' }
         });
       });
     });
-    return newEdges;
+    return result;
   }, [tasks]);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[calc(100vh-100px)]">
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', height: 'calc(100vh - 100px)' }}>
       
       {/* LEFT: Builder Form */}
-      <div className="bg-card p-6 rounded-lg border border-gray-700 overflow-y-auto">
-        <h2 className="text-2xl font-bold mb-6">Pipeline Builder</h2>
+      <div style={{ background: '#1e293b', borderRadius: '8px', border: '1px solid #374151', overflowY: 'auto', padding: '24px' }}>
+        <h2 style={{ fontSize: '22px', fontWeight: 'bold', marginBottom: '20px' }}>🏗️ Pipeline Builder</h2>
         
-        <div className="mb-8">
-          <label className="block text-sm font-medium mb-2">Pipeline Name</label>
-          <input 
-            type="text" 
-            value={name} 
-            onChange={e => setName(e.target.value)} 
-            className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white" 
-            placeholder="e.g., Release v2.0"
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', fontSize: '13px', marginBottom: '6px', color: '#94a3b8' }}>Pipeline Name</label>
+          <input
+            type="text" value={name} onChange={e => setName(e.target.value)}
+            style={{ width: '100%', background: '#0f172a', border: '1px solid #374151', borderRadius: '6px', padding: '8px 12px', color: 'white', boxSizing: 'border-box' }}
+            placeholder="e.g., Java Release v2.0"
           />
         </div>
 
-        <div className="border-t border-gray-700 pt-6">
-          <h3 className="text-xl font-semibold mb-4">Add Task</h3>
-          <form onSubmit={handleAddTask} className="space-y-4">
-            <div>
-              <label className="block text-sm mb-1 text-gray-300">Task Name</label>
-              <input required type="text" value={taskName} onChange={e => setTaskName(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2" />
+        <div style={{ borderTop: '1px solid #374151', paddingTop: '20px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '16px' }}>Add Task</h3>
+          <form onSubmit={handleAddTask}>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#94a3b8' }}>Task Name</label>
+              <input required type="text" value={taskName} onChange={e => setTaskName(e.target.value)}
+                style={{ width: '100%', background: '#0f172a', border: '1px solid #374151', borderRadius: '6px', padding: '8px', color: 'white', boxSizing: 'border-box' }}
+                placeholder="e.g., Build, Unit Test, Deploy" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm mb-1 text-gray-300">Duration (s)</label>
-                <input required type="number" min="1" value={duration} onChange={e => setDuration(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2" />
-              </div>
-              <div>
-                <label className="block text-sm mb-1 text-gray-300">Priority (1-10)</label>
-                <input required type="number" min="1" max="10" value={priority} onChange={e => setPriority(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2" />
-              </div>
-              <div>
-                <label className="block text-sm mb-1 text-gray-300">CPU Cores</label>
-                <input required type="number" min="1" value={cpu} onChange={e => setCpu(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2" />
-              </div>
-              <div>
-                <label className="block text-sm mb-1 text-gray-300">RAM (GB)</label>
-                <input required type="number" min="1" value={ram} onChange={e => setRam(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2" />
-              </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+              {[
+                { label: 'Duration (s)', value: duration, setter: setDuration, min: 1, placeholder: '5' },
+                { label: 'Priority (1-10)', value: priority, setter: setPriority, min: 1, max: 10 },
+                { label: 'CPU Cores', value: cpu, setter: setCpu, min: 1 },
+                { label: 'RAM (GB)', value: ram, setter: setRam, min: 1 },
+              ].map(({ label, value, setter, min, max, placeholder }) => (
+                <div key={label}>
+                  <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px', color: '#94a3b8' }}>{label}</label>
+                  <input required type="number" min={min} max={max} value={value} onChange={e => setter(e.target.value)}
+                    placeholder={placeholder}
+                    style={{ width: '100%', background: '#0f172a', border: '1px solid #374151', borderRadius: '6px', padding: '8px', color: 'white', boxSizing: 'border-box' }} />
+                </div>
+              ))}
             </div>
 
             {tasks.length > 0 && (
-              <div>
-                <label className="block text-sm mb-2 text-gray-300">Depends On (Select multiple)</label>
-                <div className="flex flex-wrap gap-2">
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '12px', marginBottom: '6px', color: '#94a3b8' }}>Depends On</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {tasks.map(t => (
-                    <button
-                      key={t.name}
-                      type="button"
-                      onClick={() => toggleDependency(t.name)}
-                      className={`px-3 py-1 rounded text-sm ${dependsOn.includes(t.name) ? 'bg-accent text-white' : 'bg-gray-700 text-gray-300'}`}
-                    >
+                    <button key={t.name} type="button" onClick={() => toggleDependency(t.name)}
+                      style={{ padding: '4px 12px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontSize: '12px',
+                        background: dependsOn.includes(t.name) ? '#6366f1' : '#374151',
+                        color: 'white' }}>
                       {t.name}
                     </button>
                   ))}
@@ -169,30 +157,47 @@ export default function PipelineBuilder() {
               </div>
             )}
 
-            <button type="submit" className="w-full bg-gray-700 hover:bg-gray-600 text-white py-2 rounded font-medium mt-4">
+            <button type="submit"
+              style={{ width: '100%', padding: '10px', background: '#374151', border: 'none', borderRadius: '6px', color: 'white', cursor: 'pointer', fontWeight: '500' }}>
               + Add Task
             </button>
           </form>
         </div>
 
-        <div className="mt-8">
-          <button onClick={handleSavePipeline} className="w-full bg-accent hover:bg-accent/90 text-white py-3 rounded font-bold text-lg shadow-lg">
-            Save Pipeline
-          </button>
-        </div>
+        {tasks.length > 0 && (
+          <div style={{ marginTop: '16px', borderTop: '1px solid #374151', paddingTop: '16px' }}>
+            <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>Tasks ({tasks.length})</p>
+            {tasks.map((t, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: '#0f172a', borderRadius: '6px', marginBottom: '6px', fontSize: '13px' }}>
+                <span>{t.name}</span>
+                <span style={{ color: '#6366f1' }}>{t.duration}s | P{t.priority} | {t.required_cpu}CPU/{t.required_ram}GB</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button onClick={handleSavePipeline} disabled={loading}
+          style={{ width: '100%', marginTop: '20px', padding: '14px', background: loading ? '#4338ca' : '#6366f1', border: 'none', borderRadius: '8px', color: 'white', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold', fontSize: '16px' }}>
+          {loading ? 'Saving...' : '💾 Save Pipeline'}
+        </button>
       </div>
 
       {/* RIGHT: DAG Preview */}
-      <div className="bg-card rounded-lg border border-gray-700 flex flex-col">
-        <div className="p-4 border-b border-gray-700">
-          <h3 className="font-bold">Live DAG Preview</h3>
+      <div style={{ background: '#1e293b', borderRadius: '8px', border: '1px solid #374151', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '16px', borderBottom: '1px solid #374151' }}>
+          <h3 style={{ fontWeight: 'bold', margin: 0 }}>🔗 Live DAG Preview</h3>
+          <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#94a3b8' }}>
+            {tasks.length === 0 ? 'Add tasks to see the dependency graph' : `${tasks.length} task(s) — arrows show dependencies`}
+          </p>
         </div>
-        <div className="flex-grow">
-          <ReactFlow nodes={nodes} edges={edges} fitView>
-            <Background color="#334155" gap={16} />
-            <Controls />
-            <MiniMap nodeColor="#6366f1" maskColor="rgba(15, 23, 42, 0.7)" />
-          </ReactFlow>
+        <div style={{ flexGrow: 1, minHeight: '400px' }}>
+          <ReactFlowProvider>
+            <ReactFlow nodes={nodes} edges={edges} fitView style={{ width: '100%', height: '100%' }}>
+              <Background color="#334155" gap={16} />
+              <Controls />
+              <MiniMap nodeColor="#6366f1" maskColor="rgba(15, 23, 42, 0.7)" />
+            </ReactFlow>
+          </ReactFlowProvider>
         </div>
       </div>
 
