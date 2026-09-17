@@ -142,3 +142,101 @@ def compare_algorithms(pipeline_id: int, db: Session):
             })
         
     return formatted_results
+
+
+def run_multi_simulation(pipeline_ids: list, algorithm: str, db: Session):
+    """
+    Run MULTIPLE pipelines simultaneously on a SHARED pool of runners.
+    This is the core concept: tasks from different pipelines compete for
+    the same limited runners, and the scheduler decides who gets what.
+    """
+    db_runners = db.query(models.Runner).all()
+    if not db_runners:
+        return {"error": "NO_RUNNERS", "message": "No runners configured. Add runners first."}
+
+    all_sched_tasks = []
+    pipeline_info = {}   # pid -> {name, color, tasks}
+
+    PIPELINE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+
+    valid_ids = []
+    for i, pid in enumerate(pipeline_ids):
+        db_pipeline = db.query(models.Pipeline).filter(models.Pipeline.id == pid).first()
+        if not db_pipeline:
+            continue
+        valid_ids.append(pid)
+        prefix = f"p{i}_"
+        color = PIPELINE_COLORS[i % len(PIPELINE_COLORS)]
+        pipeline_info[str(pid)] = {
+            "name": db_pipeline.name,
+            "color": color,
+            "prefix": prefix,
+        }
+
+        for t in db_pipeline.tasks:
+            depends_on = json.loads(t.depends_on) if t.depends_on else []
+            all_sched_tasks.append(SchedTask(
+                id=f"{prefix}{t.name}",
+                name=t.name,              # Keep short name for display
+                duration=t.duration,
+                priority=t.priority,
+                required_cpu=t.required_cpu,
+                required_ram=t.required_ram,
+                dependencies=[f"{prefix}{dep}" for dep in depends_on]
+            ))
+
+    if not all_sched_tasks:
+        return None
+
+    # Combined pipeline: all tasks from all selected pipelines share runners
+    combined = SchedPipeline(
+        id="multi_run",
+        name="Multi-Pipeline Run",
+        tasks=all_sched_tasks
+    )
+
+    sched_runners = [SchedRunner(
+        id=str(r.id), name=r.name, cpu_cores=r.cpu_cores, ram_gb=r.ram_gb
+    ) for r in db_runners]
+
+    try:
+        algo_enum = Algorithm(algorithm)
+    except ValueError:
+        algo_enum = Algorithm.FCFS
+
+    metrics = run_pipeline(combined, sched_runners, algo_enum, speed_multiplier=5.0)
+
+    if "error" in metrics:
+        return {"error": metrics["error"], "message": metrics.get("message")}
+
+    # Enrich task_details with pipeline info
+    task_details = metrics.get('task_details', [])
+    for td in task_details:
+        # Find which pipeline this task belongs to by matching prefix
+        for pid, info in pipeline_info.items():
+            if td['id'].startswith(info['prefix']):
+                td['pipeline_name'] = info['name']
+                td['pipeline_color'] = info['color']
+                td['pipeline_id'] = int(pid)
+                break
+
+    # Save a summary run record
+    run_record = models.PipelineRun(
+        pipeline_id=valid_ids[0] if valid_ids else pipeline_ids[0],
+        algorithm=algorithm,
+        makespan=metrics.get('makespan'),
+        avg_wait_time=metrics.get('avg_wait_time'),
+        overall_utilization=metrics.get('overall_utilization'),
+        status="completed"
+    )
+    db.add(run_record)
+    db.commit()
+    db.refresh(run_record)
+
+    return {
+        "run_id": run_record.id,
+        "metrics": metrics,
+        "pipeline_ids": valid_ids,
+        "pipeline_info": pipeline_info,
+        "total_pipelines": len(valid_ids),
+    }

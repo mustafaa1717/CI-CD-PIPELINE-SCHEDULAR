@@ -1,82 +1,124 @@
 import { useState, useEffect } from 'react';
-import { getPipelines, getRunners } from '../services/api';
+import { getPipelines, getRunners, deletePipeline } from '../services/api';
 import { Link } from 'react-router-dom';
-import { Activity, Server } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Home() {
   const [pipelines, setPipelines] = useState([]);
   const [runners, setRunners] = useState([]);
+  const [deleting, setDeleting] = useState(null);
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {
     try {
       const [pipeRes, runRes] = await Promise.all([getPipelines(), getRunners()]);
       setPipelines(pipeRes.data);
       setRunners(runRes.data);
-    } catch (err) {
-      console.error(err);
-      toast.error('Failed to load dashboard data');
+    } catch { toast.error('Failed to load dashboard'); }
+  };
+
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Delete pipeline "${name}"? This cannot be undone.`)) return;
+    setDeleting(id);
+    try {
+      await deletePipeline(id);
+      toast.success(`"${name}" deleted`);
+      setPipelines(prev => prev.filter(p => p.id !== id));
+    } catch {
+      toast.error('Failed to delete pipeline');
+    } finally {
+      setDeleting(null);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Dashboard</h1>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-card p-6 rounded-lg border border-gray-700 flex items-center gap-4">
-          <div className="p-4 bg-accent/20 rounded-full text-accent">
-            <Activity size={32} />
+    <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+      <h1 style={{ fontSize: '30px', fontWeight: 'bold', marginBottom: '24px' }}>🏠 Dashboard</h1>
+
+      {/* Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '28px' }}>
+        {[
+          { label: 'Total Pipelines', value: pipelines.length, icon: '⚡', color: '#6366f1' },
+          { label: 'Configured Runners', value: runners.length, icon: '🖥️', color: '#10b981' },
+        ].map(({ label, value, icon, color }) => (
+          <div key={label} style={{ background: '#1e293b', borderRadius: '10px', border: '1px solid #374151', padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ fontSize: '36px', width: '60px', height: '60px', borderRadius: '50%', background: `${color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {icon}
+            </div>
+            <div>
+              <div style={{ fontSize: '36px', fontWeight: 'bold', color }}>{value}</div>
+              <div style={{ color: '#94a3b8', fontSize: '14px' }}>{label}</div>
+            </div>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold">{pipelines.length}</h2>
-            <p className="text-gray-400">Total Pipelines</p>
-          </div>
-        </div>
-        <div className="bg-card p-6 rounded-lg border border-gray-700 flex items-center gap-4">
-          <div className="p-4 bg-green-500/20 rounded-full text-green-500">
-            <Server size={32} />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold">{runners.length}</h2>
-            <p className="text-gray-400">Configured Runners</p>
-          </div>
-        </div>
+        ))}
       </div>
 
-      <div className="bg-card rounded-lg border border-gray-700 overflow-hidden">
-        <div className="p-4 border-b border-gray-700 flex justify-between items-center">
-          <h2 className="text-xl font-bold">Recent Pipelines</h2>
-          <Link to="/pipelines/new" className="bg-accent text-white px-4 py-2 rounded text-sm hover:bg-accent/90">
-            Create New
-          </Link>
+      {/* Quick Actions */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+        <Link to="/pipelines/new" style={{ padding: '10px 20px', background: '#6366f1', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
+          + Create Pipeline
+        </Link>
+        <Link to="/runners" style={{ padding: '10px 20px', background: '#1e293b', border: '1px solid #374151', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
+          ⚙️ Manage Runners
+        </Link>
+        <Link to="/run" style={{ padding: '10px 20px', background: '#1e293b', border: '1px solid #374151', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
+          ▶ Run Scheduler
+        </Link>
+      </div>
+
+      {/* Pipelines Table */}
+      <div style={{ background: '#1e293b', borderRadius: '10px', border: '1px solid #374151', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ fontWeight: 'bold', fontSize: '18px', margin: 0 }}>📋 All Pipelines</h2>
+          <span style={{ fontSize: '13px', color: '#94a3b8' }}>{pipelines.length} total</span>
         </div>
-        <table className="w-full text-left border-collapse">
+        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
-            <tr className="bg-gray-800/50">
-              <th className="p-4 font-semibold text-gray-300">Name</th>
-              <th className="p-4 font-semibold text-gray-300">Tasks</th>
-              <th className="p-4 font-semibold text-gray-300">Actions</th>
+            <tr style={{ background: 'rgba(15,23,42,0.5)' }}>
+              {['#', 'Name', 'Tasks', 'Status', 'Actions'].map(h => (
+                <th key={h} style={{ padding: '12px 16px', fontWeight: '600', color: '#94a3b8', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {pipelines.map(pipe => (
-              <tr key={pipe.id} className="border-t border-gray-700 hover:bg-gray-800/20">
-                <td className="p-4 font-medium">{pipe.name}</td>
-                <td className="p-4 text-gray-400">{pipe.tasks?.length || 0} tasks</td>
-                <td className="p-4 flex gap-2">
-                  <Link to="/run" className="text-accent hover:underline text-sm">Run</Link>
+            {pipelines.map((pipe, idx) => (
+              <tr key={pipe.id}
+                style={{ borderTop: '1px solid #1e293b' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.05)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                <td style={{ padding: '14px 16px', color: '#4b5563', fontFamily: 'monospace', fontSize: '13px' }}>{pipe.id}</td>
+                <td style={{ padding: '14px 16px', fontWeight: '600', fontSize: '15px' }}>{pipe.name}</td>
+                <td style={{ padding: '14px 16px' }}>
+                  <span style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
+                    {pipe.tasks?.length || 0} tasks
+                  </span>
+                </td>
+                <td style={{ padding: '14px 16px' }}>
+                  <span style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
+                    {pipe.status || 'idle'}
+                  </span>
+                </td>
+                <td style={{ padding: '14px 16px' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <Link to="/run" style={{ color: '#6366f1', fontSize: '13px', fontWeight: '600', textDecoration: 'none', padding: '4px 12px', border: '1px solid #6366f1', borderRadius: '6px' }}>
+                      ▶ Run
+                    </Link>
+                    <button
+                      onClick={() => handleDelete(pipe.id, pipe.name)}
+                      disabled={deleting === pipe.id}
+                      style={{ color: '#ef4444', fontSize: '13px', fontWeight: '600', background: 'none', border: '1px solid #ef4444', borderRadius: '6px', padding: '4px 12px', cursor: 'pointer', opacity: deleting === pipe.id ? 0.5 : 1 }}>
+                      {deleting === pipe.id ? '...' : '🗑 Delete'}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
             {pipelines.length === 0 && (
               <tr>
-                <td colSpan="3" className="p-8 text-center text-gray-500">
-                  No pipelines found. Create one to get started!
+                <td colSpan="5" style={{ padding: '48px', textAlign: 'center', color: '#4b5563' }}>
+                  No pipelines yet.{' '}
+                  <Link to="/pipelines/new" style={{ color: '#6366f1' }}>Create your first pipeline →</Link>
                 </td>
               </tr>
             )}

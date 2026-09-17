@@ -4,7 +4,7 @@ from typing import List
 
 from .. import models, schemas
 from ..database import get_db
-from ..services.scheduler_service import run_simulation, compare_algorithms
+from ..services.scheduler_service import run_simulation, compare_algorithms, run_multi_simulation
 
 router = APIRouter(tags=["scheduler"])
 
@@ -92,6 +92,18 @@ def get_run_status(run_id: int, db: Session = Depends(get_db)):
         "makespan":   run.makespan,
         "tasks":      tasks,
     }
+
+
+@router.post("/run/multi")
+def run_multi_pipeline_endpoint(request: schemas.MultiRunRequest, db: Session = Depends(get_db)):
+    """Run multiple pipelines simultaneously on shared runners."""
+    algo = normalize_algo(request.algorithm)
+    result = run_multi_simulation(request.pipeline_ids, algo, db)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No pipelines found")
+    if isinstance(result, dict) and "error" in result:
+        raise HTTPException(status_code=400, detail=result.get("message", "Simulation error"))
+    return result
 
 
 @router.post("/compare/{pipeline_id}", response_model=List[schemas.ComparisonMetrics])

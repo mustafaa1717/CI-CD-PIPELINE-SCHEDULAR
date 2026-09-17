@@ -31,6 +31,12 @@ def create_pipeline(pipeline: schemas.PipelineCreate, db: Session = Depends(get_
         db.add(db_task)
     db.commit()
     db.refresh(db_pipeline)
+    # Parse depends_on from JSON string back to list for the response
+    for task in db_pipeline.tasks:
+        try:
+            task.depends_on = json.loads(task.depends_on)
+        except Exception:
+            task.depends_on = []
     return db_pipeline
 
 @router.get("/", response_model=List[schemas.Pipeline])
