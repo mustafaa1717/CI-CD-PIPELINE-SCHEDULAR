@@ -1,166 +1,158 @@
 import { useState, useEffect } from 'react';
 import { getPipelines, compareAlgorithms } from '../services/api';
 import toast from 'react-hot-toast';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { Crown, Loader } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+
+const ALGO_LABELS = {
+  fcfs: 'FCFS',
+  priority: 'Priority',
+  dependency_aware: 'Dep-Aware',
+  resource_aware: 'Res-Aware',
+};
 
 export default function ComparisonDashboard() {
   const [pipelines, setPipelines] = useState([]);
   const [selectedPipeline, setSelectedPipeline] = useState('');
-  const [results, setResults] = useState(null);
+  const [results, setResults] = useState(null);   // flat array from API
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchPipelines();
-  }, []);
+  useEffect(() => { fetchPipelines(); }, []);
 
   const fetchPipelines = async () => {
     try {
       const res = await getPipelines();
       setPipelines(res.data);
       if (res.data.length > 0) setSelectedPipeline(res.data[0].id);
-    } catch (err) {
+    } catch {
       toast.error('Failed to load pipelines');
     }
   };
 
   const handleCompare = async () => {
-    if (!selectedPipeline) return;
+    if (!selectedPipeline) { toast.error('Select a pipeline first'); return; }
     setLoading(true);
+    setResults(null);
     try {
       const res = await compareAlgorithms(selectedPipeline);
-      setResults(res.data);
-      toast.success('Comparison completed!');
+      setResults(res.data);   // flat array: [{algorithm, makespan, avg_wait_time, overall_utilization, ...}]
+      toast.success('Comparison complete!');
     } catch (err) {
-      toast.error('Comparison failed');
+      toast.error(err.response?.data?.detail || 'Comparison failed');
     } finally {
       setLoading(false);
     }
   };
 
-  // Find best values
-  const getBest = (metric, isLowerBetter = true) => {
-    if (!results || !results.algorithms) return null;
-    let best = results.algorithms[0];
-    results.algorithms.forEach(alg => {
-      if (isLowerBetter) {
-        if (alg[metric] < best[metric]) best = alg;
-      } else {
-        if (alg[metric] > best[metric]) best = alg;
-      }
-    });
-    return best.name;
+  // Find best algorithm for a metric
+  const getBest = (metric, lowerIsBetter = true) => {
+    if (!results || results.length === 0) return null;
+    return results.reduce((best, cur) =>
+      lowerIsBetter ? (cur[metric] < best[metric] ? cur : best)
+                    : (cur[metric] > best[metric] ? cur : best)
+    ).algorithm;
   };
 
+  const chartData = results?.map(r => ({
+    ...r,
+    name: ALGO_LABELS[r.algorithm] || r.algorithm,
+  }));
+
+  const cardBorder = (algo, metric, lower = true) =>
+    getBest(metric, lower) === algo ? '1px solid #22c55e' : '1px solid #374151';
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card p-6 rounded-lg border border-gray-700">
+    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', background: '#1e293b', padding: '24px', borderRadius: '10px', border: '1px solid #374151', marginBottom: '24px' }}>
         <div>
-          <h1 className="text-3xl font-bold">Algorithm Comparison</h1>
-          <p className="text-gray-400 mt-1">Simulate and compare scheduling algorithms side-by-side</p>
+          <h1 style={{ fontSize: '26px', fontWeight: 'bold', margin: 0 }}>⚡ Algorithm Comparison</h1>
+          <p style={{ color: '#94a3b8', margin: '4px 0 0', fontSize: '14px' }}>Run all 4 scheduling strategies on the same pipeline</p>
         </div>
-        <div className="flex items-center gap-4 w-full md:w-auto">
-          <select 
-            value={selectedPipeline} 
-            onChange={(e) => setSelectedPipeline(e.target.value)}
-            className="bg-gray-800 border border-gray-600 rounded p-2 text-white flex-grow md:w-64"
-          >
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <select value={selectedPipeline} onChange={e => setSelectedPipeline(e.target.value)}
+            style={{ background: '#0f172a', border: '1px solid #374151', borderRadius: '8px', padding: '10px 14px', color: 'white', minWidth: '200px' }}>
+            {pipelines.length === 0 && <option value="">No pipelines</option>}
             {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
-          <button 
-            onClick={handleCompare} 
-            disabled={loading || !selectedPipeline}
-            className="bg-accent hover:bg-accent/90 disabled:opacity-50 text-white px-6 py-2 rounded font-bold whitespace-nowrap flex items-center gap-2"
-          >
-            {loading ? <><Loader className="animate-spin" size={18} /> Running...</> : 'Compare All'}
+          <button onClick={handleCompare} disabled={loading || !selectedPipeline}
+            style={{ padding: '10px 24px', background: loading ? '#4338ca' : '#6366f1', border: 'none', borderRadius: '8px', color: 'white', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', minWidth: '140px' }}>
+            {loading ? '⏳ Running...' : '▶ Compare All'}
           </button>
         </div>
       </div>
 
-      {results && results.algorithms && (
+      {/* Loading state */}
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8', background: '#1e293b', borderRadius: '10px', border: '1px solid #374151' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚙️</div>
+          <p style={{ fontSize: '18px', fontWeight: '600' }}>Running all 4 algorithms simultaneously...</p>
+          <p style={{ fontSize: '14px', marginTop: '8px' }}>This may take a few seconds</p>
+        </div>
+      )}
+
+      {/* Results */}
+      {results && !loading && (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-            {results.algorithms.map((alg) => (
-              <div key={alg.name} className="bg-card p-6 rounded-lg border border-gray-700">
-                <h3 className="font-bold text-lg border-b border-gray-700 pb-2 mb-4 text-accent">{alg.name}</h3>
-                
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Makespan:</span>
-                    <span className={`font-bold flex items-center gap-1 ${getBest('makespan', true) === alg.name ? 'text-green-400' : ''}`}>
-                      {getBest('makespan', true) === alg.name && <Crown size={14} className="text-yellow-400" />}
-                      {alg.makespan}s
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Avg Wait:</span>
-                    <span className={`font-bold flex items-center gap-1 ${getBest('avg_wait_time', true) === alg.name ? 'text-green-400' : ''}`}>
-                      {getBest('avg_wait_time', true) === alg.name && <Crown size={14} className="text-yellow-400" />}
-                      {alg.avg_wait_time}s
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Utilization:</span>
-                    <span className={`font-bold flex items-center gap-1 ${getBest('utilization', false) === alg.name ? 'text-green-400' : ''}`}>
-                      {getBest('utilization', false) === alg.name && <Crown size={14} className="text-yellow-400" />}
-                      {alg.utilization}%
-                    </span>
-                  </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            {results.map(alg => {
+              const isBestMakespan = getBest('makespan', true) === alg.algorithm;
+              const isBestWait = getBest('avg_wait_time', true) === alg.algorithm;
+              const isBestUtil = getBest('overall_utilization', false) === alg.algorithm;
+              return (
+                <div key={alg.algorithm}
+                  style={{ background: '#1e293b', borderRadius: '10px', padding: '20px', border: isBestMakespan || isBestWait || isBestUtil ? '1px solid #6366f1' : '1px solid #374151' }}>
+                  <h3 style={{ color: '#6366f1', fontWeight: 'bold', fontSize: '16px', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid #374151' }}>
+                    {ALGO_LABELS[alg.algorithm] || alg.algorithm}
+                  </h3>
+                  {[
+                    { label: 'Makespan', value: `${alg.makespan?.toFixed(2)}s`, best: isBestMakespan },
+                    { label: 'Avg Wait', value: `${alg.avg_wait_time?.toFixed(3)}s`, best: isBestWait },
+                    { label: 'Utilization', value: `${alg.overall_utilization?.toFixed(1)}%`, best: isBestUtil },
+                    { label: 'Tasks Done', value: `${alg.successful_tasks ?? '—'}/${alg.total_tasks ?? '—'}`, best: false },
+                  ].map(({ label, value, best }) => (
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
+                      <span style={{ color: '#94a3b8', fontSize: '13px' }}>{label}</span>
+                      <span style={{ fontWeight: '700', color: best ? '#22c55e' : 'white', fontSize: '14px' }}>
+                        {best && '👑 '}{value}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Charts */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <div className="bg-card p-6 rounded-lg border border-gray-700 h-80">
-              <h3 className="text-center font-bold mb-4">Makespan (Lower is Better)</h3>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={results.algorithms}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" stroke="#9ca3af" tick={{fontSize: 12}} />
-                  <YAxis stroke="#9ca3af" />
-                  <Tooltip contentStyle={{backgroundColor: '#1e293b', borderColor: '#374151'}} />
-                  <Bar dataKey="makespan" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="bg-card p-6 rounded-lg border border-gray-700 h-80">
-              <h3 className="text-center font-bold mb-4">Avg Wait Time (Lower is Better)</h3>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={results.algorithms}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" stroke="#9ca3af" tick={{fontSize: 12}} />
-                  <YAxis stroke="#9ca3af" />
-                  <Tooltip contentStyle={{backgroundColor: '#1e293b', borderColor: '#374151'}} />
-                  <Bar dataKey="avg_wait_time" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            <div className="bg-card p-6 rounded-lg border border-gray-700 h-80">
-              <h3 className="text-center font-bold mb-4">Runner Utilization % (Higher is Better)</h3>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={results.algorithms}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" stroke="#9ca3af" tick={{fontSize: 12}} />
-                  <YAxis stroke="#9ca3af" />
-                  <Tooltip contentStyle={{backgroundColor: '#1e293b', borderColor: '#374151'}} />
-                  <Bar dataKey="utilization" fill="#10b981" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+            {[
+              { title: '⏱ Makespan (s) — Lower is Better', dataKey: 'makespan', color: '#6366f1' },
+              { title: '⏳ Avg Wait Time (s) — Lower is Better', dataKey: 'avg_wait_time', color: '#f59e0b' },
+              { title: '🖥 Runner Utilization % — Higher is Better', dataKey: 'overall_utilization', color: '#10b981' },
+            ].map(({ title, dataKey, color }) => (
+              <div key={dataKey} style={{ background: '#1e293b', borderRadius: '10px', border: '1px solid #374151', padding: '20px', height: '300px' }}>
+                <h3 style={{ textAlign: 'center', fontWeight: '600', marginBottom: '12px', fontSize: '13px', color: '#94a3b8' }}>{title}</h3>
+                <ResponsiveContainer width="100%" height="85%">
+                  <BarChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="name" stroke="#9ca3af" tick={{ fontSize: 11 }} />
+                    <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#374151', borderRadius: '8px' }} />
+                    <Bar dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ))}
           </div>
         </>
       )}
 
+      {/* Empty state */}
       {!results && !loading && (
-        <div className="bg-card border border-dashed border-gray-700 p-12 text-center rounded-lg text-gray-500">
-          Select a pipeline and click "Compare All" to run simulations and generate charts.
+        <div style={{ background: '#1e293b', border: '2px dashed #374151', padding: '64px', textAlign: 'center', borderRadius: '10px', color: '#4b5563' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+          <p style={{ fontSize: '16px' }}>Select a pipeline and click <strong style={{ color: '#6366f1' }}>Compare All</strong> to run all 4 algorithms</p>
+          <p style={{ fontSize: '13px', marginTop: '8px' }}>You'll see side-by-side metrics and bar charts</p>
         </div>
       )}
     </div>

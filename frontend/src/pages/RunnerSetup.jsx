@@ -87,8 +87,8 @@ export default function RunnerSetup() {
               </div>
               <div>
                 <h3 className="font-bold text-lg">{runner.name}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${runner.status === 'free' ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-                  {runner.status?.toUpperCase() || 'FREE'}
+                <span className={`text-xs px-2 py-0.5 rounded-full ${!runner.is_busy ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
+                  {runner.is_busy ? 'BUSY' : 'FREE'}
                 </span>
               </div>
             </div>

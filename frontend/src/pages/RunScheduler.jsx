@@ -1,156 +1,213 @@
-import { useState, useEffect, useRef } from 'react';
-import { getPipelines, runPipeline, getRunStatus, getRunners } from '../services/api';
+import { useState, useEffect } from 'react';
+import { getPipelines, runPipeline, getRunStatus, getRunners, getPipeline } from '../services/api';
 import toast from 'react-hot-toast';
-import { Play } from 'lucide-react';
+
+const ALGORITHMS = [
+  { id: 'fcfs',             label: 'FCFS',             desc: 'First Come First Serve — tasks run in ready order' },
+  { id: 'priority',         label: 'Priority',          desc: 'Highest priority task runs first (1–10 scale)' },
+  { id: 'dependency_aware', label: 'Dependency-Aware',  desc: 'Tasks unblocking the most others run first' },
+  { id: 'resource_aware',   label: 'Resource-Aware',    desc: 'Best-fit assignment to avoid wasting runner resources' },
+];
+
+const STATUS_STYLE = {
+  PENDING: { background: '#374151', color: '#d1d5db' },
+  READY:   { background: '#1d4ed8', color: '#bfdbfe' },
+  RUNNING: { background: '#d97706', color: '#fef3c7' },
+  SUCCESS: { background: '#15803d', color: '#bbf7d0' },
+  FAILED:  { background: '#dc2626', color: '#fee2e2' },
+};
 
 export default function RunScheduler() {
   const [pipelines, setPipelines] = useState([]);
-  const [selectedPipeline, setSelectedPipeline] = useState('');
-  const [algorithm, setAlgorithm] = useState('FCFS');
-  const [runData, setRunData] = useState(null);
   const [runners, setRunners] = useState([]);
+  const [selectedPipeline, setSelectedPipeline] = useState('');
+  const [algorithm, setAlgorithm] = useState('fcfs');
   const [isRunning, setIsRunning] = useState(false);
-  const timerRef = useRef(null);
+  const [runResult, setRunResult] = useState(null);   // {run_id, metrics}
+  const [taskDetails, setTaskDetails] = useState([]); // from metrics.task_details
 
   useEffect(() => {
-    fetchInitialData();
-    return () => clearInterval(timerRef.current);
+    (async () => {
+      try {
+        const [p, r] = await Promise.all([getPipelines(), getRunners()]);
+        setPipelines(p.data);
+        setRunners(r.data);
+        if (p.data.length > 0) setSelectedPipeline(String(p.data[0].id));
+      } catch { toast.error('Failed to load data'); }
+    })();
   }, []);
 
-  const fetchInitialData = async () => {
-    try {
-      const [pipeRes, runRes] = await Promise.all([getPipelines(), getRunners()]);
-      setPipelines(pipeRes.data);
-      if (pipeRes.data.length > 0) setSelectedPipeline(pipeRes.data[0].id);
-      setRunners(runRes.data);
-    } catch (err) {
-      toast.error('Failed to load initial data');
-    }
-  };
-
-  const handleStartRun = async () => {
-    if (!selectedPipeline) return;
+  const handleRun = async () => {
+    if (!selectedPipeline) { toast.error('Select a pipeline'); return; }
+    if (runners.length === 0) { toast.error('Add at least one runner first'); return; }
+    setIsRunning(true);
+    setRunResult(null);
+    setTaskDetails([]);
     try {
       const res = await runPipeline(selectedPipeline, algorithm);
-      setRunData(res.data);
-      setIsRunning(true);
-      toast.success('Simulation started!');
-      startPolling(res.data.id);
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to start run');
-    }
-  };
+      const data = res.data;
 
-  const startPolling = (runId) => {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(async () => {
-      try {
-        const res = await getRunStatus(runId);
-        setRunData(res.data);
-        if (res.data.status === 'completed' || res.data.status === 'failed') {
-          clearInterval(timerRef.current);
-          setIsRunning(false);
-          if(res.data.status === 'completed') toast.success('Simulation completed!');
-        }
-      } catch (err) {
-        console.error(err);
+      if (data.error) {
+        toast.error(data.message || 'Pipeline error');
+        return;
       }
-    }, 1000);
-  };
 
-  const algorithms = [
-    { id: 'FCFS', name: 'First Come First Serve', desc: 'Runs tasks in order of creation' },
-    { id: 'Priority', name: 'Priority Based', desc: 'Higher priority tasks run first' },
-    { id: 'Dependency-Aware', name: 'Dependency Aware', desc: 'Respects DAG dependencies' },
-    { id: 'Resource-Aware', name: 'Resource Aware', desc: 'Optimizes based on CPU/RAM limits' }
-  ];
-
-  const getStatusColor = (status) => {
-    switch(status?.toLowerCase()) {
-      case 'pending': return 'bg-gray-700';
-      case 'ready': return 'bg-blue-600';
-      case 'running': return 'bg-amber-500 animate-pulse';
-      case 'success': case 'completed': return 'bg-green-500';
-      case 'failed': return 'bg-red-500';
-      default: return 'bg-gray-700';
+      setRunResult(data);
+      // Extract task details from metrics
+      const tasks = data.metrics?.task_details || [];
+      setTaskDetails(tasks);
+      toast.success('Simulation complete!');
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Run failed');
+    } finally {
+      setIsRunning(false);
     }
   };
+
+  const getStatusStyle = (status) =>
+    STATUS_STYLE[status?.toUpperCase()] || STATUS_STYLE.PENDING;
+
+  const metrics = runResult?.metrics;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-100px)]">
-      {/* Control Panel */}
-      <div className="bg-card p-6 rounded-lg border border-gray-700 lg:col-span-1 overflow-y-auto">
-        <h2 className="text-xl font-bold mb-6">Simulation Setup</h2>
-        
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">Select Pipeline</label>
-          <select 
-            value={selectedPipeline} 
-            onChange={(e) => setSelectedPipeline(e.target.value)}
-            className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
-          >
+    <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '20px', height: 'calc(100vh - 100px)' }}>
+
+      {/* LEFT: Control Panel */}
+      <div style={{ background: '#1e293b', borderRadius: '10px', border: '1px solid #374151', overflowY: 'auto', padding: '20px' }}>
+        <h2 style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '20px' }}>⚙️ Setup</h2>
+
+        {/* Pipeline select */}
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '6px' }}>Pipeline</label>
+          <select value={selectedPipeline} onChange={e => setSelectedPipeline(e.target.value)}
+            style={{ width: '100%', background: '#0f172a', border: '1px solid #374151', borderRadius: '6px', padding: '8px', color: 'white', boxSizing: 'border-box' }}>
+            {pipelines.length === 0 && <option value="">No pipelines</option>}
             {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
 
-        <div className="mb-8">
-          <label className="block text-sm font-medium mb-3">Scheduling Algorithm</label>
-          <div className="space-y-3">
-            {algorithms.map(alg => (
-              <label key={alg.id} className={`block p-3 rounded border cursor-pointer transition-colors ${algorithm === alg.id ? 'border-accent bg-accent/10' : 'border-gray-700 hover:border-gray-500'}`}>
-                <div className="flex items-center gap-2">
-                  <input type="radio" name="algorithm" value={alg.id} checked={algorithm === alg.id} onChange={(e) => setAlgorithm(e.target.value)} className="text-accent focus:ring-accent" />
-                  <span className="font-medium text-sm">{alg.name}</span>
-                </div>
-                <p className="text-xs text-gray-400 mt-1 ml-5">{alg.desc}</p>
-              </label>
+        {/* Algorithm select */}
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>Algorithm</label>
+          {ALGORITHMS.map(alg => (
+            <label key={alg.id} style={{
+              display: 'block', padding: '10px 12px', borderRadius: '8px', marginBottom: '8px', cursor: 'pointer',
+              border: algorithm === alg.id ? '1px solid #6366f1' : '1px solid #374151',
+              background: algorithm === alg.id ? 'rgba(99,102,241,0.1)' : 'transparent'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input type="radio" name="algo" value={alg.id} checked={algorithm === alg.id}
+                  onChange={e => setAlgorithm(e.target.value)} style={{ accentColor: '#6366f1' }} />
+                <span style={{ fontWeight: '600', fontSize: '13px' }}>{alg.label}</span>
+              </div>
+              <p style={{ fontSize: '11px', color: '#6b7280', margin: '4px 0 0 20px' }}>{alg.desc}</p>
+            </label>
+          ))}
+        </div>
+
+        {/* Runners info */}
+        <div style={{ marginBottom: '20px', padding: '12px', background: '#0f172a', borderRadius: '8px' }}>
+          <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>Available Runners ({runners.length})</p>
+          {runners.length === 0
+            ? <p style={{ fontSize: '12px', color: '#ef4444' }}>⚠️ No runners! Add runners first.</p>
+            : runners.map(r => (
+              <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                <span>{r.name}</span>
+                <span style={{ color: '#94a3b8' }}>{r.cpu_cores}CPU / {r.ram_gb}GB</span>
+              </div>
+            ))
+          }
+        </div>
+
+        <button onClick={handleRun} disabled={isRunning || pipelines.length === 0 || runners.length === 0}
+          style={{ width: '100%', padding: '12px', background: isRunning ? '#4338ca' : '#6366f1', border: 'none', borderRadius: '8px', color: 'white', fontWeight: 'bold', cursor: isRunning ? 'not-allowed' : 'pointer' }}>
+          {isRunning ? '⏳ Simulating...' : '▶ Run Pipeline'}
+        </button>
+      </div>
+
+      {/* RIGHT: Results Panel */}
+      <div style={{ background: '#1e293b', borderRadius: '10px', border: '1px solid #374151', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {/* Header */}
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ fontWeight: 'bold', fontSize: '18px', margin: 0 }}>📊 Execution Results</h2>
+          <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+            {Object.entries(STATUS_STYLE).map(([s, style]) => (
+              <span key={s} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: style.background, display: 'inline-block' }} />
+                {s}
+              </span>
             ))}
           </div>
         </div>
 
-        <button 
-          onClick={handleStartRun} 
-          disabled={isRunning || !selectedPipeline}
-          className="w-full bg-accent hover:bg-accent/90 disabled:opacity-50 text-white py-3 rounded font-bold flex items-center justify-center gap-2"
-        >
-          <Play size={18} /> {isRunning ? 'Running...' : 'Run Pipeline'}
-        </button>
-      </div>
-
-      {/* Live Execution Panel */}
-      <div className="bg-card rounded-lg border border-gray-700 lg:col-span-3 flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
-          <h2 className="text-xl font-bold">Live Execution Monitor</h2>
-          <div className="flex gap-4 text-sm font-medium">
-            <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-gray-700"></span> Pending</span>
-            <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-blue-600"></span> Ready</span>
-            <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span> Running</span>
-            <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500"></span> Success</span>
-          </div>
-        </div>
-
-        <div className="p-6 flex-grow overflow-y-auto">
-          {!runData ? (
-            <div className="h-full flex items-center justify-center text-gray-500">
-              Select a pipeline and algorithm, then click Run Pipeline to monitor execution.
+        <div style={{ padding: '20px', overflowY: 'auto', flexGrow: 1 }}>
+          {/* Loading */}
+          {isRunning && (
+            <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>⚙️</div>
+              <p style={{ fontSize: '16px', fontWeight: '600' }}>Simulation running...</p>
+              <p style={{ fontSize: '13px', marginTop: '6px' }}>The scheduler is assigning tasks to runners</p>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {runData.tasks?.map(task => (
-                <div key={task.id} className="bg-gray-800 rounded-lg p-4 border border-gray-700 relative overflow-hidden">
-                  <div className={`absolute top-0 left-0 w-full h-1 ${getStatusColor(task.status)}`}></div>
-                  <div className="flex justify-between items-start mb-2">
-                    <h3 className="font-bold">{task.name}</h3>
-                    <span className="text-xs px-2 py-1 bg-gray-700 rounded uppercase">{task.status || 'PENDING'}</span>
-                  </div>
-                  <div className="text-sm text-gray-400 space-y-1">
-                    <p>Runner: <span className="text-white">{task.runner_name || 'Unassigned'}</span></p>
-                    <p>Duration: <span className="text-white">{task.duration}s</span></p>
-                    {task.wait_time > 0 && <p>Wait Time: <span className="text-amber-400">{task.wait_time}s</span></p>}
-                  </div>
+          )}
+
+          {/* Empty state */}
+          {!isRunning && !runResult && (
+            <div style={{ textAlign: 'center', padding: '60px', color: '#4b5563' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>🚀</div>
+              <p>Select a pipeline and algorithm, then click <strong style={{ color: '#6366f1' }}>Run Pipeline</strong></p>
+            </div>
+          )}
+
+          {/* Results */}
+          {runResult && !isRunning && (
+            <>
+              {/* Metrics summary */}
+              {metrics && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
+                  {[
+                    { label: '⏱ Makespan', value: `${metrics.makespan?.toFixed(2)}s`, color: '#6366f1' },
+                    { label: '⏳ Avg Wait', value: `${metrics.avg_wait_time?.toFixed(3)}s`, color: '#f59e0b' },
+                    { label: '🖥 Utilization', value: `${metrics.overall_utilization?.toFixed(1)}%`, color: '#10b981' },
+                    { label: '✅ Successful', value: `${metrics.successful_tasks}/${metrics.total_tasks}`, color: '#22c55e' },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} style={{ background: '#0f172a', borderRadius: '8px', padding: '14px', border: '1px solid #374151', textAlign: 'center' }}>
+                      <p style={{ color: '#94a3b8', fontSize: '12px', margin: '0 0 6px' }}>{label}</p>
+                      <p style={{ color, fontWeight: 'bold', fontSize: '20px', margin: 0 }}>{value}</p>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              )}
+
+              {/* Task cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '14px' }}>
+                {taskDetails.map(task => {
+                  const s = getStatusStyle(task.status);
+                  return (
+                    <div key={task.id} style={{ background: '#0f172a', borderRadius: '8px', padding: '14px', border: '1px solid #374151', position: 'relative', overflow: 'hidden' }}>
+                      {/* Top color bar */}
+                      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: s.background }} />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                        <h3 style={{ fontWeight: 'bold', margin: 0, fontSize: '14px' }}>{task.name}</h3>
+                        <span style={{ padding: '2px 8px', borderRadius: '20px', fontSize: '10px', fontWeight: '700', ...s }}>
+                          {task.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span>Runner</span><span style={{ color: '#c4b5fd' }}>{task.assigned_runner || 'None'}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span>Exec Time</span><span style={{ color: 'white' }}>{task.execution_time != null ? `${task.execution_time.toFixed(2)}s` : '—'}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span>Wait Time</span><span style={{ color: '#fbbf24' }}>{task.wait_time != null ? `${task.wait_time.toFixed(3)}s` : '—'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
       </div>

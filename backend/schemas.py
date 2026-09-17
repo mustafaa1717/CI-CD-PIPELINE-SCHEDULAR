@@ -93,3 +93,6 @@ class ComparisonMetrics(BaseModel):
     makespan: float
     avg_wait_time: float
     overall_utilization: float
+    successful_tasks: Optional[int] = None
+    total_tasks: Optional[int] = None
+    error: Optional[str] = None
