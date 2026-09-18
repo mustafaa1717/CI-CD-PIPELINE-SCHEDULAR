@@ -403,7 +403,7 @@ export default function RunScheduler() {
               getColor={pipeColor}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               {/* ── RUNNER LANES ── */}
               <div className="glass-card" style={{ display: 'flex', flexDirection: 'column' }}>
                 <div className="glass-card-header">
