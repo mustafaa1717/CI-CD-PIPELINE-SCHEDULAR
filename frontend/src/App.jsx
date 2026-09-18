@@ -8,6 +8,7 @@ import RunScheduler from './pages/RunScheduler';
 import ComparisonDashboard from './pages/ComparisonDashboard';
 import RunHistory from './pages/RunHistory';
 import { Toaster } from 'react-hot-toast';
+import { AlertTriangle } from 'lucide-react';
 
 class ErrorBoundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
@@ -15,17 +16,21 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: '40px', color: '#ededed', background: '#000000', minHeight: '100vh' }}>
-          <h2 style={{ color: '#ef4444', marginBottom: '16px', fontWeight: '500' }}>Application Error</h2>
-          <pre style={{ background: '#0a0a0a', border: '1px solid #27272a', padding: '24px', borderRadius: '6px', color: '#888888', whiteSpace: 'pre-wrap', fontSize: '13px', lineHeight: '1.5' }}>
-            {this.state.error.toString()}
-            {'\n\n'}
-            {this.state.error.stack}
-          </pre>
-          <button onClick={() => this.setState({ error: null })}
-            style={{ marginTop: '24px', padding: '8px 16px', background: '#ededed', color: '#000000', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', fontSize: '14px' }}>
-            Try Again
-          </button>
+        <div style={{ padding: '60px', maxWidth: '800px', margin: '0 auto', color: '#f8fafc' }}>
+          <div className="glass-card" style={{ padding: '32px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', color: '#f87171', marginBottom: '20px' }}>
+              <AlertTriangle size={28} />
+              <h2 style={{ fontSize: '24px', fontWeight: '600', margin: 0 }}>Application Error</h2>
+            </div>
+            <pre style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.05)', padding: '24px', borderRadius: '8px', color: '#94a3b8', whiteSpace: 'pre-wrap', fontSize: '13px', lineHeight: '1.6' }}>
+              {this.state.error.toString()}
+              {'\n\n'}
+              {this.state.error.stack}
+            </pre>
+            <button className="btn-secondary" onClick={() => this.setState({ error: null })} style={{ marginTop: '24px' }}>
+              Try Again
+            </button>
+          </div>
         </div>
       );
     }
@@ -35,7 +40,7 @@ class ErrorBoundary extends Component {
 
 function App() {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', color: '#ededed', background: '#000000' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <ErrorBoundary>
         <Navbar />
       </ErrorBoundary>
@@ -51,22 +56,7 @@ function App() {
           </Routes>
         </ErrorBoundary>
       </main>
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          style: {
-            background: '#0a0a0a',
-            border: '1px solid #27272a',
-            color: '#ededed',
-            fontFamily: 'Inter, sans-serif',
-            fontSize: '13px',
-            borderRadius: '6px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-          },
-          success: { iconTheme: { primary: '#10b981', secondary: '#000000' } },
-          error:   { iconTheme: { primary: '#ef4444', secondary: '#000000' } },
-        }}
-      />
+      <Toaster position="bottom-right" />
     </div>
   );
 }

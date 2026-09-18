@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getRunners, createRunner, deleteRunner } from '../services/api';
 import toast from 'react-hot-toast';
-import { Server, Trash2, Cpu, MemoryStick } from 'lucide-react';
+import { Server, Trash2, Cpu, HardDrive } from 'lucide-react';
 
 export default function RunnerSetup() {
   const [runners, setRunners] = useState([]);
@@ -48,12 +48,12 @@ export default function RunnerSetup() {
   };
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto', fontFamily: '"Inter", sans-serif', color: '#ededed' }}>
-      <h1 style={{ fontSize: '24px', fontWeight: '500', marginBottom: '24px', color: '#ededed' }}>Runner Setup</h1>
+    <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
+      <h1 style={{ fontSize: '24px', fontWeight: '500', marginBottom: '24px' }}>Runner Setup</h1>
 
-      <div style={{ background: '#0a0a0a', padding: '24px', borderRadius: '8px', border: '1px solid #27272a', marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '16px', color: '#ededed' }}>Add New Runner</h2>
-        <form onSubmit={handleAddRunner} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
+      <div className="glass-card" style={{ marginBottom: '24px' }}>
+        <h2 className="glass-card-header">Add New Runner</h2>
+        <form onSubmit={handleAddRunner} style={{ padding: '24px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <label style={{ fontSize: '13px', marginBottom: '8px', color: '#888888' }}>Name</label>
             <input required type="text" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', background: '#000000', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', color: '#ededed', fontSize: '14px', outline: 'none' }} placeholder="worker-1" />
@@ -66,7 +66,7 @@ export default function RunnerSetup() {
             <label style={{ fontSize: '13px', marginBottom: '8px', color: '#888888' }}>RAM (GB)</label>
             <input required type="number" min="1" value={ram} onChange={e => setRam(e.target.value)} style={{ width: '100%', background: '#000000', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', color: '#ededed', fontSize: '14px', outline: 'none' }} />
           </div>
-          <button type="submit" style={{ background: '#ededed', color: '#000000', fontWeight: '500', border: 'none', borderRadius: '6px', padding: '10px 16px', fontSize: '14px', cursor: 'pointer', height: '40px' }}>
+          <button type="submit" className="btn-primary" style={{ height: '40px' }}>
             Add Runner
           </button>
         </form>
@@ -74,7 +74,7 @@ export default function RunnerSetup() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
         {runners.map(runner => (
-          <div key={runner.id} style={{ background: '#0a0a0a', padding: '20px', borderRadius: '8px', border: '1px solid #27272a', position: 'relative' }}>
+          <div key={runner.id} className="glass-card" style={{ padding: '20px', position: 'relative' }}>
             <button 
               onClick={() => handleDelete(runner.id)} 
               style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', color: '#888888', cursor: 'pointer', padding: '4px' }}
@@ -88,14 +88,14 @@ export default function RunnerSetup() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <h3 style={{ fontWeight: '500', fontSize: '16px', margin: 0 }}>{runner.name}</h3>
-                <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '6px', border: '1px solid #27272a', background: 'rgba(255,255,255,0.05)', color: !runner.is_busy ? '#10b981' : '#ef4444', width: 'fit-content' }}>
+                <span className={`badge ${!runner.is_busy ? 'badge-emerald' : 'badge-rose'}`} style={{ width: 'fit-content' }}>
                   {runner.is_busy ? 'Busy' : 'Free'}
                 </span>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: '#888888' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Cpu size={14}/> {runner.cpu_cores} Cores</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><MemoryStick size={14}/> {runner.ram_gb} GB</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><HardDrive size={14}/> {runner.ram_gb} GB</div>
             </div>
           </div>
         ))}
