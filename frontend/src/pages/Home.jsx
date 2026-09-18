@@ -33,22 +33,19 @@ export default function Home() {
   };
 
   return (
-    <div style={{ maxWidth: '1100px', margin: '0 auto' }}>
-      <h1 style={{ fontSize: '30px', fontWeight: 'bold', marginBottom: '24px' }}>🏠 Dashboard</h1>
+    <div style={{ maxWidth: '1100px', margin: '0 auto', fontFamily: "'Inter', sans-serif", color: '#ededed' }}>
+      <h1 style={{ fontSize: '24px', fontWeight: '500', marginBottom: '24px', color: '#ededed' }}>Dashboard</h1>
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '28px' }}>
         {[
-          { label: 'Total Pipelines', value: pipelines.length, icon: '⚡', color: '#6366f1' },
-          { label: 'Configured Runners', value: runners.length, icon: '🖥️', color: '#10b981' },
-        ].map(({ label, value, icon, color }) => (
-          <div key={label} style={{ background: '#1e293b', borderRadius: '10px', border: '1px solid #374151', padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
-            <div style={{ fontSize: '36px', width: '60px', height: '60px', borderRadius: '50%', background: `${color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {icon}
-            </div>
+          { label: 'Total Pipelines', value: pipelines.length },
+          { label: 'Configured Runners', value: runners.length },
+        ].map(({ label, value }) => (
+          <div key={label} style={{ background: '#0a0a0a', borderRadius: '8px', border: '1px solid #27272a', padding: '24px', display: 'flex', alignItems: 'center', gap: '20px' }}>
             <div>
-              <div style={{ fontSize: '36px', fontWeight: 'bold', color }}>{value}</div>
-              <div style={{ color: '#94a3b8', fontSize: '14px' }}>{label}</div>
+              <div style={{ fontSize: '32px', fontWeight: '500', color: '#ededed' }}>{value}</div>
+              <div style={{ color: '#888888', fontSize: '14px' }}>{label}</div>
             </div>
           </div>
         ))}
@@ -56,59 +53,59 @@ export default function Home() {
 
       {/* Quick Actions */}
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-        <Link to="/pipelines/new" style={{ padding: '10px 20px', background: '#6366f1', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
-          + Create Pipeline
+        <Link to="/pipelines/new" style={{ padding: '8px 16px', background: '#ededed', borderRadius: '6px', color: '#000000', textDecoration: 'none', fontWeight: '500', fontSize: '14px' }}>
+          Create Pipeline
         </Link>
-        <Link to="/runners" style={{ padding: '10px 20px', background: '#1e293b', border: '1px solid #374151', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
-          ⚙️ Manage Runners
+        <Link to="/runners" style={{ padding: '8px 16px', background: '#0a0a0a', border: '1px solid #27272a', borderRadius: '6px', color: '#ededed', textDecoration: 'none', fontWeight: '500', fontSize: '14px' }}>
+          Manage Runners
         </Link>
-        <Link to="/run" style={{ padding: '10px 20px', background: '#1e293b', border: '1px solid #374151', borderRadius: '8px', color: 'white', textDecoration: 'none', fontWeight: '600', fontSize: '14px' }}>
-          ▶ Run Scheduler
+        <Link to="/run" style={{ padding: '8px 16px', background: '#0a0a0a', border: '1px solid #27272a', borderRadius: '6px', color: '#ededed', textDecoration: 'none', fontWeight: '500', fontSize: '14px' }}>
+          Run Scheduler
         </Link>
       </div>
 
       {/* Pipelines Table */}
-      <div style={{ background: '#1e293b', borderRadius: '10px', border: '1px solid #374151', overflow: 'hidden' }}>
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid #374151', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h2 style={{ fontWeight: 'bold', fontSize: '18px', margin: 0 }}>📋 All Pipelines</h2>
-          <span style={{ fontSize: '13px', color: '#94a3b8' }}>{pipelines.length} total</span>
+      <div style={{ background: '#0a0a0a', borderRadius: '8px', border: '1px solid #27272a', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #27272a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ fontWeight: '500', fontSize: '16px', margin: 0, color: '#ededed' }}>All Pipelines</h2>
+          <span style={{ fontSize: '13px', color: '#888888' }}>{pipelines.length} total</span>
         </div>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
-            <tr style={{ background: 'rgba(15,23,42,0.5)' }}>
+            <tr style={{ background: '#0a0a0a' }}>
               {['#', 'Name', 'Tasks', 'Status', 'Actions'].map(h => (
-                <th key={h} style={{ padding: '12px 16px', fontWeight: '600', color: '#94a3b8', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+                <th key={h} style={{ padding: '12px 16px', fontWeight: '500', color: '#888888', fontSize: '12px', borderBottom: '1px solid #27272a' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {pipelines.map((pipe, idx) => (
               <tr key={pipe.id}
-                style={{ borderTop: '1px solid #1e293b' }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.05)'}
+                style={{ borderBottom: '1px solid #27272a' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                <td style={{ padding: '14px 16px', color: '#4b5563', fontFamily: 'monospace', fontSize: '13px' }}>{pipe.id}</td>
-                <td style={{ padding: '14px 16px', fontWeight: '600', fontSize: '15px' }}>{pipe.name}</td>
+                <td style={{ padding: '14px 16px', color: '#888888', fontFamily: 'monospace', fontSize: '13px' }}>{pipe.id}</td>
+                <td style={{ padding: '14px 16px', fontWeight: '500', fontSize: '14px', color: '#ededed' }}>{pipe.name}</td>
                 <td style={{ padding: '14px 16px' }}>
-                  <span style={{ background: 'rgba(99,102,241,0.15)', color: '#a5b4fc', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
+                  <span style={{ background: 'rgba(255,255,255,0.05)', color: '#ededed', padding: '4px 8px', borderRadius: '4px', border: '1px solid #27272a', fontSize: '12px', fontWeight: '500' }}>
                     {pipe.tasks?.length || 0} tasks
                   </span>
                 </td>
                 <td style={{ padding: '14px 16px' }}>
-                  <span style={{ background: 'rgba(16,185,129,0.15)', color: '#34d399', padding: '3px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: '600' }}>
+                  <span style={{ background: 'rgba(255,255,255,0.05)', color: pipe.status === 'idle' ? '#888888' : '#10b981', padding: '4px 8px', borderRadius: '4px', border: '1px solid #27272a', fontSize: '12px', fontWeight: '500' }}>
                     {pipe.status || 'idle'}
                   </span>
                 </td>
                 <td style={{ padding: '14px 16px' }}>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <Link to="/run" style={{ color: '#6366f1', fontSize: '13px', fontWeight: '600', textDecoration: 'none', padding: '4px 12px', border: '1px solid #6366f1', borderRadius: '6px' }}>
-                      ▶ Run
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <Link to="/run" style={{ color: '#ededed', fontSize: '13px', fontWeight: '500', textDecoration: 'none', padding: '6px 12px', border: '1px solid #27272a', borderRadius: '6px', background: '#0a0a0a' }}>
+                      Run
                     </Link>
                     <button
                       onClick={() => handleDelete(pipe.id, pipe.name)}
                       disabled={deleting === pipe.id}
-                      style={{ color: '#ef4444', fontSize: '13px', fontWeight: '600', background: 'none', border: '1px solid #ef4444', borderRadius: '6px', padding: '4px 12px', cursor: 'pointer', opacity: deleting === pipe.id ? 0.5 : 1 }}>
-                      {deleting === pipe.id ? '...' : '🗑 Delete'}
+                      style={{ color: '#ef4444', fontSize: '13px', fontWeight: '500', background: '#0a0a0a', border: '1px solid #27272a', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', opacity: deleting === pipe.id ? 0.5 : 1 }}>
+                      {deleting === pipe.id ? '...' : 'Delete'}
                     </button>
                   </div>
                 </td>
@@ -116,9 +113,9 @@ export default function Home() {
             ))}
             {pipelines.length === 0 && (
               <tr>
-                <td colSpan="5" style={{ padding: '48px', textAlign: 'center', color: '#4b5563' }}>
+                <td colSpan="5" style={{ padding: '48px', textAlign: 'center', color: '#888888', fontSize: '14px' }}>
                   No pipelines yet.{' '}
-                  <Link to="/pipelines/new" style={{ color: '#6366f1' }}>Create your first pipeline →</Link>
+                  <Link to="/pipelines/new" style={{ color: '#ededed', textDecoration: 'none' }}>Create your first pipeline</Link>
                 </td>
               </tr>
             )}

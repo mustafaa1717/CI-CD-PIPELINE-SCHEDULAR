@@ -13,7 +13,7 @@ const ALGO_LABELS = {
 export default function ComparisonDashboard() {
   const [pipelines, setPipelines] = useState([]);
   const [selectedPipeline, setSelectedPipeline] = useState('');
-  const [results, setResults] = useState(null);   // flat array from API
+  const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => { fetchPipelines(); }, []);
@@ -34,8 +34,8 @@ export default function ComparisonDashboard() {
     setResults(null);
     try {
       const res = await compareAlgorithms(selectedPipeline);
-      setResults(res.data);   // flat array: [{algorithm, makespan, avg_wait_time, overall_utilization, ...}]
-      toast.success('Comparison complete!');
+      setResults(res.data);
+      toast.success('Comparison complete');
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Comparison failed');
     } finally {
@@ -43,7 +43,6 @@ export default function ComparisonDashboard() {
     }
   };
 
-  // Find best algorithm for a metric
   const getBest = (metric, lowerIsBetter = true) => {
     if (!results || results.length === 0) return null;
     return results.reduce((best, cur) =>
@@ -57,35 +56,31 @@ export default function ComparisonDashboard() {
     name: ALGO_LABELS[r.algorithm] || r.algorithm,
   }));
 
-  const cardBorder = (algo, metric, lower = true) =>
-    getBest(metric, lower) === algo ? '1px solid #22c55e' : '1px solid #374151';
-
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: '"Inter", sans-serif', color: '#ededed' }}>
       {/* Header */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', background: '#1e293b', padding: '24px', borderRadius: '10px', border: '1px solid #374151', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '16px', background: '#0a0a0a', padding: '24px', borderRadius: '8px', border: '1px solid #27272a', marginBottom: '24px' }}>
         <div>
-          <h1 style={{ fontSize: '26px', fontWeight: 'bold', margin: 0 }}>⚡ Algorithm Comparison</h1>
-          <p style={{ color: '#94a3b8', margin: '4px 0 0', fontSize: '14px' }}>Run all 4 scheduling strategies on the same pipeline</p>
+          <h1 style={{ fontSize: '24px', fontWeight: '500', margin: 0, color: '#ededed' }}>Algorithm Comparison</h1>
+          <p style={{ color: '#888888', margin: '8px 0 0', fontSize: '14px' }}>Run all 4 scheduling strategies on the same pipeline</p>
         </div>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <select value={selectedPipeline} onChange={e => setSelectedPipeline(e.target.value)}
-            style={{ background: '#0f172a', border: '1px solid #374151', borderRadius: '8px', padding: '10px 14px', color: 'white', minWidth: '200px' }}>
+            style={{ background: '#000000', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 14px', color: '#ededed', minWidth: '200px', fontSize: '14px', outline: 'none' }}>
             {pipelines.length === 0 && <option value="">No pipelines</option>}
             {pipelines.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           <button onClick={handleCompare} disabled={loading || !selectedPipeline}
-            style={{ padding: '10px 24px', background: loading ? '#4338ca' : '#6366f1', border: 'none', borderRadius: '8px', color: 'white', fontWeight: 'bold', cursor: loading ? 'not-allowed' : 'pointer', minWidth: '140px' }}>
-            {loading ? '⏳ Running...' : '▶ Compare All'}
+            style={{ padding: '10px 24px', background: loading ? '#0a0a0a' : '#ededed', border: loading ? '1px solid #27272a' : 'none', borderRadius: '6px', color: loading ? '#888888' : '#000000', fontWeight: '500', cursor: loading ? 'not-allowed' : 'pointer', minWidth: '140px', fontSize: '14px' }}>
+            {loading ? 'Running...' : 'Compare All'}
           </button>
         </div>
       </div>
 
       {/* Loading state */}
       {loading && (
-        <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8', background: '#1e293b', borderRadius: '10px', border: '1px solid #374151' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚙️</div>
-          <p style={{ fontSize: '18px', fontWeight: '600' }}>Running all 4 algorithms simultaneously...</p>
+        <div style={{ textAlign: 'center', padding: '64px', color: '#888888', background: '#0a0a0a', borderRadius: '8px', border: '1px solid #27272a' }}>
+          <p style={{ fontSize: '16px', fontWeight: '500', color: '#ededed' }}>Running all 4 algorithms simultaneously...</p>
           <p style={{ fontSize: '14px', marginTop: '8px' }}>This may take a few seconds</p>
         </div>
       )}
@@ -101,8 +96,8 @@ export default function ComparisonDashboard() {
               const isBestUtil = getBest('overall_utilization', false) === alg.algorithm;
               return (
                 <div key={alg.algorithm}
-                  style={{ background: '#1e293b', borderRadius: '10px', padding: '20px', border: isBestMakespan || isBestWait || isBestUtil ? '1px solid #6366f1' : '1px solid #374151' }}>
-                  <h3 style={{ color: '#6366f1', fontWeight: 'bold', fontSize: '16px', marginBottom: '16px', paddingBottom: '10px', borderBottom: '1px solid #374151' }}>
+                  style={{ background: '#0a0a0a', borderRadius: '8px', padding: '20px', border: '1px solid #27272a' }}>
+                  <h3 style={{ color: '#ededed', fontWeight: '500', fontSize: '16px', marginBottom: '16px', paddingBottom: '12px', borderBottom: '1px solid #27272a', margin: '0 0 16px 0' }}>
                     {ALGO_LABELS[alg.algorithm] || alg.algorithm}
                   </h3>
                   {[
@@ -111,10 +106,10 @@ export default function ComparisonDashboard() {
                     { label: 'Utilization', value: `${alg.overall_utilization?.toFixed(1)}%`, best: isBestUtil },
                     { label: 'Tasks Done', value: `${alg.successful_tasks ?? '—'}/${alg.total_tasks ?? '—'}`, best: false },
                   ].map(({ label, value, best }) => (
-                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
-                      <span style={{ color: '#94a3b8', fontSize: '13px' }}>{label}</span>
-                      <span style={{ fontWeight: '700', color: best ? '#22c55e' : 'white', fontSize: '14px' }}>
-                        {best && '👑 '}{value}
+                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px', alignItems: 'center' }}>
+                      <span style={{ color: '#888888', fontSize: '13px' }}>{label}</span>
+                      <span style={{ fontWeight: '500', color: best ? '#10b981' : '#ededed', fontSize: '14px' }}>
+                        {value} {best && <span style={{ fontSize: '12px', marginLeft: '4px', color: '#10b981', border: '1px solid #10b981', padding: '1px 4px', borderRadius: '4px', background: 'rgba(16,185,129,0.1)' }}>Best</span>}
                       </span>
                     </div>
                   ))}
@@ -126,19 +121,19 @@ export default function ComparisonDashboard() {
           {/* Charts */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
             {[
-              { title: '⏱ Makespan (s) — Lower is Better', dataKey: 'makespan', color: '#6366f1' },
-              { title: '⏳ Avg Wait Time (s) — Lower is Better', dataKey: 'avg_wait_time', color: '#f59e0b' },
-              { title: '🖥 Runner Utilization % — Higher is Better', dataKey: 'overall_utilization', color: '#10b981' },
+              { title: 'Makespan (s) — Lower is Better', dataKey: 'makespan', color: '#ededed' },
+              { title: 'Avg Wait Time (s) — Lower is Better', dataKey: 'avg_wait_time', color: '#888888' },
+              { title: 'Runner Utilization % — Higher is Better', dataKey: 'overall_utilization', color: '#0070f3' },
             ].map(({ title, dataKey, color }) => (
-              <div key={dataKey} style={{ background: '#1e293b', borderRadius: '10px', border: '1px solid #374151', padding: '20px', height: '300px' }}>
-                <h3 style={{ textAlign: 'center', fontWeight: '600', marginBottom: '12px', fontSize: '13px', color: '#94a3b8' }}>{title}</h3>
-                <ResponsiveContainer width="100%" height="85%">
-                  <BarChart data={chartData} margin={{ top: 5, right: 10, left: -10, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="name" stroke="#9ca3af" tick={{ fontSize: 11 }} />
-                    <YAxis stroke="#9ca3af" tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#374151', borderRadius: '8px' }} />
-                    <Bar dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} />
+              <div key={dataKey} style={{ background: '#0a0a0a', borderRadius: '8px', border: '1px solid #27272a', padding: '24px', height: '300px' }}>
+                <h3 style={{ textAlign: 'center', fontWeight: '500', marginBottom: '24px', fontSize: '14px', color: '#888888', margin: '0 0 24px 0' }}>{title}</h3>
+                <ResponsiveContainer width="100%" height="80%">
+                  <BarChart data={chartData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
+                    <XAxis dataKey="name" stroke="#888888" tick={{ fontSize: 12, fill: '#888888' }} axisLine={{ stroke: '#27272a' }} tickLine={false} />
+                    <YAxis stroke="#888888" tick={{ fontSize: 12, fill: '#888888' }} axisLine={false} tickLine={false} />
+                    <Tooltip cursor={{ fill: '#27272a', opacity: 0.4 }} contentStyle={{ backgroundColor: '#000000', borderColor: '#27272a', borderRadius: '6px', color: '#ededed', fontSize: '13px' }} itemStyle={{ color: '#ededed' }} />
+                    <Bar dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} maxBarSize={50} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -149,10 +144,9 @@ export default function ComparisonDashboard() {
 
       {/* Empty state */}
       {!results && !loading && (
-        <div style={{ background: '#1e293b', border: '2px dashed #374151', padding: '64px', textAlign: 'center', borderRadius: '10px', color: '#4b5563' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
-          <p style={{ fontSize: '16px' }}>Select a pipeline and click <strong style={{ color: '#6366f1' }}>Compare All</strong> to run all 4 algorithms</p>
-          <p style={{ fontSize: '13px', marginTop: '8px' }}>You'll see side-by-side metrics and bar charts</p>
+        <div style={{ background: '#0a0a0a', border: '1px dashed #27272a', padding: '64px', textAlign: 'center', borderRadius: '8px', color: '#888888' }}>
+          <p style={{ fontSize: '16px', color: '#ededed', fontWeight: '500', margin: '0 0 8px 0' }}>Select a pipeline and click Compare All to run all 4 algorithms</p>
+          <p style={{ fontSize: '14px', margin: 0 }}>You'll see side-by-side metrics and bar charts</p>
         </div>
       )}
     </div>

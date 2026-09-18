@@ -48,58 +48,59 @@ export default function RunnerSetup() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold">Runner Setup</h1>
+    <div style={{ maxWidth: '1100px', margin: '0 auto', fontFamily: '"Inter", sans-serif', color: '#ededed' }}>
+      <h1 style={{ fontSize: '24px', fontWeight: '500', marginBottom: '24px', color: '#ededed' }}>Runner Setup</h1>
 
-      <div className="bg-card p-6 rounded-lg border border-gray-700">
-        <h2 className="text-xl font-bold mb-4">Add New Runner</h2>
-        <form onSubmit={handleAddRunner} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block text-sm mb-1 text-gray-300">Name</label>
-            <input required type="text" value={name} onChange={e => setName(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2" placeholder="worker-1" />
+      <div style={{ background: '#0a0a0a', padding: '24px', borderRadius: '8px', border: '1px solid #27272a', marginBottom: '24px' }}>
+        <h2 style={{ fontSize: '16px', fontWeight: '500', marginBottom: '16px', color: '#ededed' }}>Add New Runner</h2>
+        <form onSubmit={handleAddRunner} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{ fontSize: '13px', marginBottom: '8px', color: '#888888' }}>Name</label>
+            <input required type="text" value={name} onChange={e => setName(e.target.value)} style={{ width: '100%', background: '#000000', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', color: '#ededed', fontSize: '14px', outline: 'none' }} placeholder="worker-1" />
           </div>
-          <div>
-            <label className="block text-sm mb-1 text-gray-300">CPU Cores</label>
-            <input required type="number" min="1" value={cpuCores} onChange={e => setCpuCores(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2" />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{ fontSize: '13px', marginBottom: '8px', color: '#888888' }}>CPU Cores</label>
+            <input required type="number" min="1" value={cpuCores} onChange={e => setCpuCores(e.target.value)} style={{ width: '100%', background: '#000000', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', color: '#ededed', fontSize: '14px', outline: 'none' }} />
           </div>
-          <div>
-            <label className="block text-sm mb-1 text-gray-300">RAM (GB)</label>
-            <input required type="number" min="1" value={ram} onChange={e => setRam(e.target.value)} className="w-full bg-gray-800 border border-gray-600 rounded p-2" />
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label style={{ fontSize: '13px', marginBottom: '8px', color: '#888888' }}>RAM (GB)</label>
+            <input required type="number" min="1" value={ram} onChange={e => setRam(e.target.value)} style={{ width: '100%', background: '#000000', border: '1px solid #27272a', borderRadius: '6px', padding: '10px 12px', color: '#ededed', fontSize: '14px', outline: 'none' }} />
           </div>
-          <button type="submit" className="bg-accent hover:bg-accent/90 text-white py-2 rounded font-medium h-[42px]">
+          <button type="submit" style={{ background: '#ededed', color: '#000000', fontWeight: '500', border: 'none', borderRadius: '6px', padding: '10px 16px', fontSize: '14px', cursor: 'pointer', height: '40px' }}>
             Add Runner
           </button>
         </form>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
         {runners.map(runner => (
-          <div key={runner.id} className="bg-card p-5 rounded-lg border border-gray-700 relative group">
+          <div key={runner.id} style={{ background: '#0a0a0a', padding: '20px', borderRadius: '8px', border: '1px solid #27272a', position: 'relative' }}>
             <button 
               onClick={() => handleDelete(runner.id)} 
-              className="absolute top-4 right-4 text-gray-500 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+              style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', color: '#888888', cursor: 'pointer', padding: '4px' }}
+              title="Delete Runner"
             >
-              <Trash2 size={18} />
+              <Trash2 size={16} />
             </button>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-3 bg-gray-800 rounded-full text-accent">
-                <Server size={24} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{ padding: '8px', background: 'rgba(255,255,255,0.05)', borderRadius: '6px', border: '1px solid #27272a', color: '#ededed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Server size={18} />
               </div>
-              <div>
-                <h3 className="font-bold text-lg">{runner.name}</h3>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${!runner.is_busy ? 'bg-green-500/20 text-green-500' : 'bg-red-500/20 text-red-500'}`}>
-                  {runner.is_busy ? 'BUSY' : 'FREE'}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <h3 style={{ fontWeight: '500', fontSize: '16px', margin: 0 }}>{runner.name}</h3>
+                <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '6px', border: '1px solid #27272a', background: 'rgba(255,255,255,0.05)', color: !runner.is_busy ? '#10b981' : '#ef4444', width: 'fit-content' }}>
+                  {runner.is_busy ? 'Busy' : 'Free'}
                 </span>
               </div>
             </div>
-            <div className="flex gap-4 text-sm text-gray-400">
-              <div className="flex items-center gap-1"><Cpu size={14}/> {runner.cpu_cores} Cores</div>
-              <div className="flex items-center gap-1"><MemoryStick size={14}/> {runner.ram_gb} GB</div>
+            <div style={{ display: 'flex', gap: '16px', fontSize: '13px', color: '#888888' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Cpu size={14}/> {runner.cpu_cores} Cores</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><MemoryStick size={14}/> {runner.ram_gb} GB</div>
             </div>
           </div>
         ))}
         {runners.length === 0 && (
-          <div className="col-span-3 text-center p-12 text-gray-500 border border-dashed border-gray-700 rounded-lg">
+          <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: '48px', color: '#888888', border: '1px dashed #27272a', borderRadius: '8px', fontSize: '14px' }}>
             No runners configured. Add one above.
           </div>
         )}
