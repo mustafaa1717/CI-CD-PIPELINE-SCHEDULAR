@@ -19,6 +19,7 @@ export const runMultiPipeline = (pipeline_ids, algorithm) => api.post('/run/mult
 export const getRunStatus = (runId) => api.get(`/runs/${runId}/status`);
 export const getRunHistory = () => api.get('/runs');
 export const getRunMetrics = (runId) => api.get(`/runs/${runId}/metrics`);
+export const clearRunHistory = () => api.delete('/runs');
 
 export const compareAlgorithms = (id) => api.post(`/compare/${id}`);
 

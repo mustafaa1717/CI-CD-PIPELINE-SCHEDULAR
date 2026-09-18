@@ -149,12 +149,14 @@ export default function RunScheduler() {
       const { data } = await runMultiPipeline(selected, algorithm);
       if (!data || data.error) { toast.error(data?.message || 'Run failed'); setPhase('idle'); return; }
 
-      const m  = data.metrics || {};
-      const pi = data.pipeline_info || {};
+      const m    = data.metrics || {};
+      const pi   = data.pipeline_info || {};
+      const spd  = data.speed_multiplier || 5.0;   // how much faster backend ran
       setMetrics(m);
       setPipeInfo(pi);
       toast.success(`✓ Makespan: ${(m.makespan || 0).toFixed(2)}s`);
-      beginReplay(m.task_details || [], m.makespan || 1, pi);
+      // Pass speedMultiplier so animation shows original task durations
+      beginReplay(m.task_details || [], m.makespan || 1, pi, spd);
     } catch (err) {
       toast.error(err?.response?.data?.detail || 'Simulation failed');
       setPhase('idle');
@@ -162,31 +164,38 @@ export default function RunScheduler() {
   };
 
   /* ── REPLAY ── */
-  const beginReplay = (tasks, makespan, pi) => {
+  const beginReplay = (tasks, actualMakespan, pi, speedMult) => {
     if (!tasks.length) { setPhase('done'); return; }
     const starts = tasks.map(t => t.start_time).filter(Boolean);
     if (!starts.length) { setPhase('done'); return; }
     const t0 = Math.min(...starts);
 
+    // Multiply all time offsets by speedMult so:
+    //   - a 5s task that ran in 1s (at 5x speed) animates as 5s
+    //   - visualMakespan = actualMakespan * speedMult ≈ original pipeline duration
+    const visualMs = actualMakespan * speedMult;
+
     const norm = tasks.map(t => ({
       ...t,
-      rel_ready: t.start_time ? Math.max(0, (t.start_time - t0) - (t.wait_time || 0)) : 0,
-      rel_start: t.start_time ? t.start_time - t0 : null,
-      rel_end:   t.end_time   ? t.end_time   - t0 : null,
+      rel_ready: t.start_time
+        ? Math.max(0, ((t.start_time - t0) - (t.wait_time || 0)) * speedMult)
+        : 0,
+      rel_start: t.start_time ? (t.start_time - t0) * speedMult : null,
+      rel_end:   t.end_time   ? (t.end_time   - t0) * speedMult : null,
       curStatus: 'PENDING',
       progress:  0,
     }));
 
-    snapRef.current = norm;
+    snapRef.current  = norm;
     setReplayTasks([...norm]);
-    setVisualMakespan(makespan);
+    setVisualMakespan(visualMs);
     setPhase('replay');
     elapsed.current = 0;
 
-    // Play at 1x real speed — cap at 60s (animation)
-    const REPLAY_MS = Math.min(makespan * 1000, 60000);
-    const TICK      = 80;  // ms per frame
-    const scale     = makespan / (REPLAY_MS / 1000);
+    // Play at 1x real speed (capped at 60s for very long pipelines)
+    const REPLAY_MS = Math.min(visualMs * 1000, 60000);
+    const TICK      = 80;
+    const scale     = visualMs / (REPLAY_MS / 1000);
 
     timerRef.current = setInterval(() => {
       elapsed.current += (TICK / 1000) * scale;
@@ -209,21 +218,27 @@ export default function RunScheduler() {
 
       snapRef.current = updated;
       setReplayTasks([...updated]);
-      setPct(Math.min((t / makespan) * 100, 100));
+      setPct(Math.min((t / visualMs) * 100, 100));
 
-      // Runner lane state
+      // Runner lane state — map runner name → active task
       const rm = {};
       runnersRef.current.forEach(r => { rm[r.name] = null; });
       updated.forEach(task => {
-        if (task.curStatus === 'RUNNING' && task.assigned_runner) rm[task.assigned_runner] = task;
+        if (task.curStatus === 'RUNNING' && task.assigned_runner) {
+          rm[task.assigned_runner] = task;
+        }
       });
       setRunnerState({ ...rm });
 
-      if (t >= makespan + 0.5) {
+      if (t >= visualMs + 0.5) {
         clearInterval(timerRef.current);
         setPhase('done');
         setPct(100);
-        setCurrentTime(makespan);
+        setCurrentTime(visualMs);
+        // Show all runners FREE on completion
+        const finalRm = {};
+        runnersRef.current.forEach(r => { finalRm[r.name] = null; });
+        setRunnerState({ ...finalRm });
       }
     }, TICK);
   };
@@ -245,7 +260,20 @@ export default function RunScheduler() {
   };
 
   const STATUSES = ['PENDING','READY','RUNNING','SUCCESS','FAILED'];
-  const columns  = STATUSES.map(s => ({ s, items: replayTasks.filter(t => t.curStatus === s) }));
+  const columns  = STATUSES.map(s => ({
+    s,
+    items: replayTasks
+      .filter(t => t.curStatus === s)
+      // SUCCESS/FAILED: sort by when they finished (first to complete = top of list)
+      .sort((a, b) => {
+        if (s === 'SUCCESS' || s === 'FAILED') {
+          return (a.rel_end || 0) - (b.rel_end || 0);
+        }
+        // RUNNING: sort by start time
+        if (s === 'RUNNING') return (a.rel_start || 0) - (b.rel_start || 0);
+        return 0;
+      }),
+  }));
 
   /* ════ RENDER ════ */
   return (

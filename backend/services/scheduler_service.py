@@ -195,24 +195,34 @@ def run_multi_simulation(pipeline_ids: list, algorithm: str, db: Session):
         tasks=all_sched_tasks
     )
 
+    SPEED_MULTIPLIER = 5.0   # tasks run 5x faster; animation scaled back on frontend
+
     sched_runners = [SchedRunner(
         id=str(r.id), name=r.name, cpu_cores=r.cpu_cores, ram_gb=r.ram_gb
     ) for r in db_runners]
+
+    # Build ID→name map so runner IDs in task_details become display names
+    runner_id_to_name = {str(r.id): r.name for r in db_runners}
 
     try:
         algo_enum = Algorithm(algorithm)
     except ValueError:
         algo_enum = Algorithm.FCFS
 
-    metrics = run_pipeline(combined, sched_runners, algo_enum, speed_multiplier=1.0)
+    metrics = run_pipeline(combined, sched_runners, algo_enum, speed_multiplier=SPEED_MULTIPLIER)
 
     if "error" in metrics:
         return {"error": metrics["error"], "message": metrics.get("message")}
 
-    # Enrich task_details with pipeline info
+    # Enrich task_details: map runner IDs → names, tag pipeline info
     task_details = metrics.get('task_details', [])
     for td in task_details:
-        # Find which pipeline this task belongs to by matching prefix
+        # Map runner ID ("1") → runner name ("Runner 1")
+        raw_runner = td.get('assigned_runner')
+        if raw_runner is not None:
+            td['assigned_runner'] = runner_id_to_name.get(str(raw_runner), str(raw_runner))
+
+        # Tag with pipeline metadata
         for pid, info in pipeline_info.items():
             if td['id'].startswith(info['prefix']):
                 td['pipeline_name'] = info['name']
@@ -234,9 +244,10 @@ def run_multi_simulation(pipeline_ids: list, algorithm: str, db: Session):
     db.refresh(run_record)
 
     return {
-        "run_id": run_record.id,
-        "metrics": metrics,
-        "pipeline_ids": valid_ids,
-        "pipeline_info": pipeline_info,
-        "total_pipelines": len(valid_ids),
+        "run_id":           run_record.id,
+        "metrics":          metrics,
+        "pipeline_ids":     valid_ids,
+        "pipeline_info":    pipeline_info,
+        "total_pipelines":  len(valid_ids),
+        "speed_multiplier": SPEED_MULTIPLIER,   # frontend uses this to scale replay animation
     }

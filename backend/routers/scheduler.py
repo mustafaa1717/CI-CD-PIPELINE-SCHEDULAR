@@ -55,6 +55,15 @@ def list_runs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     ).offset(skip).limit(limit).all()
 
 
+@router.delete("/runs")
+def clear_all_runs(db: Session = Depends(get_db)):
+    """Delete all run history (TaskExecutions + PipelineRuns)."""
+    db.query(models.TaskExecution).delete()
+    db.query(models.PipelineRun).delete()
+    db.commit()
+    return {"message": "All run history cleared", "deleted": True}
+
+
 @router.get("/runs/{run_id}", response_model=schemas.PipelineRun)
 def get_run(run_id: int, db: Session = Depends(get_db)):
     run = db.query(models.PipelineRun).filter(models.PipelineRun.id == run_id).first()
