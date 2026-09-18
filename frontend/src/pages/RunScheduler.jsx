@@ -403,15 +403,14 @@ export default function RunScheduler() {
               getColor={pipeColor}
             />
 
-            <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
               {/* ── RUNNER LANES ── */}
-              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column' }}>
+              <div className="glass-card" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', marginBottom: '16px' }}>
                 <div className="glass-card-header">
                   <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '500', color: '#ededed', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <Server size={16} style={{ color: '#888888' }} /> Runner Status
                   </h3>
                 </div>
-                <div className="glass-card-body" style={{ display:'flex', flexDirection: 'column', gap:'16px' }}>
+                <div className="glass-card-body" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(280px, 1fr))', gap:'16px' }}>
                   {runners.map(runner => {
                     const busy = runnerState[runner.name] || null;
                     const tc   = busy ? pipeColor(busy) : 'rgba(255,255,255,0.08)';
@@ -451,66 +450,8 @@ export default function RunScheduler() {
                 </div>
               </div>
 
-              {/* ── METRICS ── */}
-              <div className="glass-card" style={{ display: 'flex', flexDirection: 'column' }}>
-                <div className="glass-card-header">
-                  <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '500', color: '#ededed', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Activity size={16} style={{ color: '#888888' }} /> Results: {ALGORITHMS.find(a => a.id===algorithm)?.label}
-                  </h3>
-                </div>
-                <div className="glass-card-body">
-                  {metrics ? (
-                    <>
-                      <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'16px', marginBottom:'24px' }}>
-                        {[
-                          ['Total Makespan',`${(metrics.makespan||0).toFixed(2)}s`,'#ffffff'],
-                          ['Avg Wait Time', `${(metrics.avg_wait_time||0).toFixed(2)}s`,'#ffffff'],
-                          ['Utilization',   `${(metrics.overall_utilization||0).toFixed(1)}%`,'#10b981'],
-                          ['Tasks Done',    `${metrics.successful_tasks||0}/${metrics.total_tasks||0}`,'#10b981'],
-                          ['Failed',        `${metrics.failed_tasks||0}`,'#ef4444'],
-                          ['Pipelines',     `${selected.length}`,'#cbd5e1'],
-                        ].map(([label, val, clr]) => (
-                          <div key={label} style={{ background:'rgba(0,0,0,0.2)', borderRadius:'8px', padding:'16px', border:'1px solid rgba(255,255,255,0.08)' }}>
-                            <div style={{ fontSize:'12px', color:'#888888', marginBottom:'8px', fontWeight: '500' }}>{label}</div>
-                            <div style={{ fontSize:'20px', fontWeight:'500', color:clr }}>{val}</div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Per-runner breakdown */}
-                      {(metrics.runner_stats||[]).length > 0 && (
-                        <>
-                          <p style={{ fontSize:'12px', color:'#888888', margin:'0 0 12px', fontWeight:'600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Runner Breakdown</p>
-                          <div style={{ display:'flex', flexDirection: 'column', gap:'12px' }}>
-                            {metrics.runner_stats.map(rs => (
-                              <div key={rs.runner_id} style={{ background:'rgba(0,0,0,0.2)', borderRadius:'8px', padding:'16px', border:'1px solid rgba(255,255,255,0.08)' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                                  <div style={{ fontWeight:'500', fontSize:'14px', color:'#ffffff' }}>{rs.runner_name}</div>
-                                  <div style={{ fontSize:'12px', color:'#888888' }}>{rs.tasks_completed} tasks</div>
-                                </div>
-                                <div style={{ height:'6px', background:'rgba(255,255,255,0.08)', borderRadius:'3px', overflow:'hidden', marginBottom: '8px' }}>
-                                  <div style={{ height:'100%', width:`${rs.utilization||0}%`, background:'#0070f3' }}/>
-                                </div>
-                                <div style={{ fontSize:'12px', color:'#888888', textAlign:'right', fontWeight: '500' }}>
-                                  {(rs.utilization||0).toFixed(1)}% utilized
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </>
-                  ) : (
-                     <div style={{ textAlign: 'center', color: '#888888', fontSize: '13px', padding: '40px 0' }}>
-                       Metrics will appear here after simulation.
-                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
             {/* ── TASK KANBAN ── */}
-            <div className="glass-card" style={{ marginTop: '20px' }}>
+            <div className="glass-card" style={{ flexShrink: 0, marginTop: '16px' }}>
               <div className="glass-card-header">
                 <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '500', color: '#ededed', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Activity size={16} style={{ color: '#888888' }} /> Task Flow
@@ -578,6 +519,66 @@ export default function RunScheduler() {
               </div>
             </div>
 
+            {phase === 'done' && (<>
+              {/* ── METRICS ── */}
+              <div className="glass-card" style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', marginTop: '16px' }}>
+                <div className="glass-card-header">
+                  <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '500', color: '#ededed', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Activity size={16} style={{ color: '#888888' }} /> Results: {ALGORITHMS.find(a => a.id===algorithm)?.label}
+                  </h3>
+                </div>
+                <div className="glass-card-body">
+                  {metrics ? (
+                    <>
+                      <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'16px', marginBottom:'24px' }}>
+                        {[
+                          ['Total Makespan',`${(metrics.makespan||0).toFixed(2)}s`,'#ffffff'],
+                          ['Avg Wait Time', `${(metrics.avg_wait_time||0).toFixed(2)}s`,'#ffffff'],
+                          ['Utilization',   `${(metrics.overall_utilization||0).toFixed(1)}%`,'#10b981'],
+                          ['Tasks Done',    `${metrics.successful_tasks||0}/${metrics.total_tasks||0}`,'#10b981'],
+                          ['Failed',        `${metrics.failed_tasks||0}`,'#ef4444'],
+                          ['Pipelines',     `${selected.length}`,'#cbd5e1'],
+                        ].map(([label, val, clr]) => (
+                          <div key={label} style={{ background:'rgba(0,0,0,0.2)', borderRadius:'8px', padding:'16px', border:'1px solid rgba(255,255,255,0.08)' }}>
+                            <div style={{ fontSize:'12px', color:'#888888', marginBottom:'8px', fontWeight: '500' }}>{label}</div>
+                            <div style={{ fontSize:'20px', fontWeight:'500', color:clr }}>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Per-runner breakdown */}
+                      {(metrics.runner_stats||[]).length > 0 && (
+                        <>
+                          <p style={{ fontSize:'12px', color:'#888888', margin:'0 0 12px', fontWeight:'600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Runner Breakdown</p>
+                          <div style={{ display:'flex', flexDirection: 'column', gap:'12px' }}>
+                            {metrics.runner_stats.map(rs => (
+                              <div key={rs.runner_id} style={{ background:'rgba(0,0,0,0.2)', borderRadius:'8px', padding:'16px', border:'1px solid rgba(255,255,255,0.08)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                                  <div style={{ fontWeight:'500', fontSize:'14px', color:'#ffffff' }}>{rs.runner_name}</div>
+                                  <div style={{ fontSize:'12px', color:'#888888' }}>{rs.tasks_completed} tasks</div>
+                                </div>
+                                <div style={{ height:'6px', background:'rgba(255,255,255,0.08)', borderRadius:'3px', overflow:'hidden', marginBottom: '8px' }}>
+                                  <div style={{ height:'100%', width:`${rs.utilization||0}%`, background:'#0070f3' }}/>
+                                </div>
+                                <div style={{ fontSize:'12px', color:'#888888', textAlign:'right', fontWeight: '500' }}>
+                                  {(rs.utilization||0).toFixed(1)}% utilized
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                     <div style={{ textAlign: 'center', color: '#888888', fontSize: '13px', padding: '40px 0' }}>
+                       Metrics will appear here after simulation.
+                     </div>
+                  )}
+                </div>
+              </div>
+            
+
+            </>)}
           </>
         )}
       </main>
