@@ -14,10 +14,7 @@ app.use(express.json());
 app.use('/api/runners', runnerRoutes);
 
 // MongoDB connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/cicd-scheduler', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/cicd-scheduler')
 .then(() => {
   console.log('Connected to MongoDB');
   app.listen(PORT, () => {
