@@ -7,12 +7,14 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000/api';
 let runnerId = null;
 let status = 'IDLE';
 let currentTask = null; // Stores task ID
+let runnerConfig = null;
 
 async function registerRunner() {
   try {
     const sysInfo = await getSystemInfo();
+    runnerConfig = sysInfo;
     console.log(`Registering runner with backend...`);
-    console.log(`Detected resources: ${sysInfo.cpuCores} Cores, ${sysInfo.memoryMB} MB RAM, Docker: ${sysInfo.docker}`);
+    console.log(`Allocated resources: ${sysInfo.cpuCores} Cores, ${sysInfo.memoryMB} MB RAM, Docker: ${sysInfo.docker}`);
     
     const response = await axios.post(`${BACKEND_URL}/runners/register`, sysInfo);
     runnerId = response.data.runnerId;
@@ -59,8 +61,8 @@ async function pollForTasks() {
       status = 'BUSY';
       currentTask = task._id;
       
-      // Execute the task
-      const result = await runInDocker(task.image, task.command);
+      // Execute the task with resource limits
+      const result = await runInDocker(task.image, task.command, runnerConfig.cpuCores, runnerConfig.memoryMB);
       
       console.log(`<<< Task Completed. Success: ${result.success}, ExitCode: ${result.exitCode}, Duration: ${result.durationMs}ms`);
       

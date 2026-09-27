@@ -16,14 +16,16 @@ async function getSystemInfo() {
   const dockerAvailable = await checkDocker();
   
   const cpus = os.cpus();
-  // Physical cores are harder to detect perfectly in plain Node.js os module, 
-  // but cpus.length gives logical cores. We use that.
-  const cpuCores = cpus.length;
+  const physicalCores = cpus.length;
+  const physicalMemoryMB = Math.round(os.totalmem() / (1024 * 1024));
   
-  // Memory in MB
-  const memoryMB = Math.round(os.totalmem() / (1024 * 1024));
+  // Use allocated resources from env vars if provided, otherwise use physical limits
+  const cpuCores = process.env.RUNNER_CPUS ? parseFloat(process.env.RUNNER_CPUS) : physicalCores;
+  const memoryMB = process.env.RUNNER_MEMORY ? parseInt(process.env.RUNNER_MEMORY, 10) : physicalMemoryMB;
+  const name = process.env.RUNNER_NAME || `Runner-${Math.random().toString(36).substr(2, 5)}`;
   
   return {
+    name,
     hostname: os.hostname(),
     cpuCores,
     memoryMB,

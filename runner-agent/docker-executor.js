@@ -2,19 +2,28 @@ const { spawn } = require('child_process');
 
 /**
  * Executes a command inside a Docker container.
- * @param {string} image - The Docker image to use (e.g., 'ubuntu:latest', 'node:18')
+ * @param {string} image - The Docker image to use
  * @param {string} command - The command to run
- * @returns {Promise<Object>} - Contains stdout, stderr, exitCode, duration
+ * @param {number} cpus - CPU limit (e.g., 2)
+ * @param {number} memoryMB - Memory limit in MB (e.g., 2048)
+ * @returns {Promise<Object>}
  */
-async function runInDocker(image = 'ubuntu:latest', command) {
+async function runInDocker(image = 'ubuntu:latest', command, cpus = null, memoryMB = null) {
   return new Promise((resolve) => {
     const startTime = Date.now();
     let stdoutData = '';
     let stderrData = '';
 
-    // We use the --rm flag so the container is removed after it exits
-    // We pass the command to sh -c to allow complex commands
-    const args = ['run', '--rm', image, 'sh', '-c', command];
+    const args = ['run', '--rm'];
+    
+    if (cpus) {
+      args.push(`--cpus=${cpus}`);
+    }
+    if (memoryMB) {
+      args.push(`--memory=${memoryMB}m`);
+    }
+
+    args.push(image, 'sh', '-c', command);
     
     console.log(`[Docker Executor] Running: docker ${args.join(' ')}`);
     const dockerProcess = spawn('docker', args);

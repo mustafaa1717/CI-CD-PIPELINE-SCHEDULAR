@@ -5,10 +5,10 @@ const Runner = require('../models/Runner');
 // Register a new runner
 router.post('/register', async (req, res) => {
   try {
-    const { hostname, cpuCores, memoryMB, gpu, docker, capabilities } = req.body;
+    const { name, hostname, cpuCores, memoryMB, gpu, docker, capabilities } = req.body;
     
-    // Check if runner already exists (using hostname as identifier for now)
-    let runner = await Runner.findOne({ hostname });
+    // Check if runner already exists (using name as identifier)
+    let runner = await Runner.findOne({ name });
     
     if (runner) {
       // Update existing runner
@@ -23,7 +23,7 @@ router.post('/register', async (req, res) => {
     } else {
       // Create new runner
       runner = new Runner({
-        name: `Runner-${Math.random().toString(36).substr(2, 5)}`,
+        name,
         hostname,
         cpuCapacity: cpuCores,
         memoryCapacity: memoryMB,
