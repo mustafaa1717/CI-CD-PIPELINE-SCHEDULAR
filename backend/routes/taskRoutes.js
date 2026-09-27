@@ -37,7 +37,7 @@ router.get('/next/:runnerId', async (req, res) => {
           startedAt: Date.now()
         } 
       },
-      { new: true, sort: { createdAt: 1 } }
+      { returnDocument: 'after', sort: { createdAt: 1 } }
     );
     
     if (task) {
