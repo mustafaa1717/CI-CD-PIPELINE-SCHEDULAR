@@ -19,6 +19,11 @@ app.use('/api/tasks', taskRoutes);
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/cicd-scheduler')
 .then(() => {
   console.log('Connected to MongoDB');
+  
+  // Start the Scheduler Engine
+  const { startScheduler } = require('./scheduler');
+  startScheduler();
+
   app.listen(PORT, () => {
     console.log(`Backend server running on port ${PORT}`);
   });

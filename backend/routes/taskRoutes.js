@@ -6,8 +6,15 @@ const Runner = require('../models/Runner');
 // Create a new task (For us to test manually)
 router.post('/', async (req, res) => {
   try {
-    const { name, command, image } = req.body;
-    const task = new Task({ name, command, image, status: 'QUEUED' });
+    const { name, command, image, requiredCpus, requiredMemoryMB } = req.body;
+    // Task starts as WAITING by default
+    const task = new Task({ 
+      name, 
+      command, 
+      image, 
+      requiredCpus: requiredCpus || 1, 
+      requiredMemoryMB: requiredMemoryMB || 512 
+    });
     await task.save();
     res.status(201).json(task);
   } catch (err) {
@@ -15,19 +22,18 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Runner polls for a task
+// Runner polls for its explicitly assigned task
 router.get('/next/:runnerId', async (req, res) => {
   try {
     const { runnerId } = req.params;
     
-    // In Phase 4, the Scheduler will assign tasks. 
-    // For Phase 2, the runner just grabs the first QUEUED task.
+    // The Scheduler Engine already set this task to QUEUED and assigned it to this runner.
+    // The runner just claims it and marks it RUNNING.
     const task = await Task.findOneAndUpdate(
-      { status: 'QUEUED' },
+      { status: 'QUEUED', assignedRunner: runnerId },
       { 
         $set: { 
           status: 'RUNNING', 
-          assignedRunner: runnerId,
           startedAt: Date.now()
         } 
       },
@@ -35,12 +41,10 @@ router.get('/next/:runnerId', async (req, res) => {
     );
     
     if (task) {
-      // Also mark runner as BUSY
-      await Runner.findByIdAndUpdate(runnerId, { status: 'BUSY', currentTask: task._id });
       return res.status(200).json(task);
     }
     
-    res.status(204).send(); // No tasks available
+    res.status(204).send(); // No tasks available for me
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch next task' });
   }

@@ -1,9 +1,11 @@
 const http = require('http');
 
 const data = JSON.stringify({
-  name: 'hello-world',
-  command: 'echo "Hello from Docker! The runner executed me!"',
-  image: 'ubuntu:latest'
+  name: 'heavy-build-job',
+  command: 'echo "I need 4 Cores! Only Worker 2 can run me!"',
+  image: 'ubuntu:latest',
+  requiredCpus: 4,
+  requiredMemoryMB: 1024
 });
 
 const options = {
