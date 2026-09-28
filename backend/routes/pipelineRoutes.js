@@ -75,7 +75,7 @@ router.post('/setup-demo', async (req, res) => {
   try {
     const project = new Project({
       name: 'demo-backend',
-      repository: 'https://github.com/mustafaa1717/demo.git'
+      repository: 'https://github.com/mustafaa1717/demo-backend.git'
     });
     await project.save();
 
