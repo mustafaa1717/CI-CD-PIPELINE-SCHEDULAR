@@ -30,7 +30,12 @@ require('./passport'); // Load our GitHub strategy
 app.use(session({
   secret: 'super-secret-cicd-key',
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  cookie: {
+    secure: false,
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000
+  }
 }));
 app.use(passport.initialize());
 app.use(passport.session());

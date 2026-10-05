@@ -5,6 +5,7 @@ const Project = require('../models/Project');
 const Pipeline = require('../models/Pipeline');
 const PipelineRun = require('../models/PipelineRun');
 const Task = require('../models/Task');
+const User = require('../models/User');
 
 // Trigger a pipeline run
 router.post('/:pipelineId/run', async (req, res) => {
@@ -140,20 +141,33 @@ router.post('/setup-custom', async (req, res) => {
     });
     await pipeline.save();
 
-    // WEBHOOK AUTOMATION: If user is logged in, attach the webhook to GitHub!
-    if (req.user && req.user.accessToken && process.env.NGROK_URL) {
+    // WEBHOOK AUTOMATION: If user is logged in (or saved in DB), attach the webhook to GitHub!
+    let authUser = req.user;
+    if (!authUser || !authUser.accessToken) {
+      // Fallback: Retrieve the authenticated user from MongoDB
+      authUser = await User.findOne().sort({ _id: -1 });
+    }
+
+    if (!authUser || !authUser.accessToken) {
+      console.warn('[Webhook] No GitHub user account found in database. Please log in via GitHub first.');
+    } else if (!process.env.NGROK_URL) {
+      console.warn('[Webhook] NGROK_URL not configured in backend/.env.');
+    } else {
       try {
-        // Parse "https://github.com/owner/repo.git" -> "owner/repo"
-        const repoPath = repository.replace('https://github.com/', '').replace('.git', '');
+        // Parse "https://github.com/owner/repo.git" or "https://github.com/owner/repo/" -> "owner/repo"
+        const cleanUrl = repository.trim().replace(/\/+$/, '').replace(/\.git$/, '');
+        const match = cleanUrl.match(/github\.com[/:]([^/]+\/[^/]+)/);
+        const repoPath = match ? match[1] : cleanUrl.replace(/^https?:\/\/github\.com\//, '');
         
-        console.log(`[Webhook] Attempting to create webhook for ${repoPath}...`);
+        console.log(`[Webhook] Using token for user "${authUser.username}" to create webhook on "${repoPath}"...`);
         
         const githubRes = await fetch(`https://api.github.com/repos/${repoPath}/hooks`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${req.user.accessToken}`,
+            'Authorization': `Bearer ${authUser.accessToken}`,
             'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': 'CI-CD-Scheduler'
           },
           body: JSON.stringify({
             name: 'web',
@@ -171,10 +185,10 @@ router.post('/setup-custom', async (req, res) => {
           console.log('[Webhook] Successfully attached webhook to GitHub repository!');
         } else {
           const errData = await githubRes.json();
-          console.error('[Webhook] Failed to attach webhook:', errData);
+          console.error('[Webhook] GitHub rejected webhook creation:', errData.message || errData);
         }
       } catch (webhookErr) {
-        console.error('[Webhook] Error making GitHub API request:', webhookErr);
+        console.error('[Webhook] Error making GitHub API request:', webhookErr.message);
       }
     }
 
