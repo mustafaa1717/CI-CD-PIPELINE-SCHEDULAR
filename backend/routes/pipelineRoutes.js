@@ -185,7 +185,12 @@ router.post('/setup-custom', async (req, res) => {
           console.log('[Webhook] Successfully attached webhook to GitHub repository!');
         } else {
           const errData = await githubRes.json();
-          console.error('[Webhook] GitHub rejected webhook creation:', errData.message || errData);
+          const errStr = JSON.stringify(errData);
+          if (errStr.includes('Hook already exists') || errStr.includes('already exists')) {
+            console.log('[Webhook] Webhook is already installed and active on GitHub for this repository!');
+          } else {
+            console.error('[Webhook] GitHub rejected webhook creation:', errData.message || errData);
+          }
         }
       } catch (webhookErr) {
         console.error('[Webhook] Error making GitHub API request:', webhookErr.message);
