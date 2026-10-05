@@ -1,91 +1,151 @@
 require('dotenv').config();
+const { io } = require('socket.io-client');
 const axios = require('axios');
 const { getSystemInfo } = require('./system-info');
 const { runInDocker } = require('./docker-executor');
 
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3000/api';
+const SOCKET_URL = process.env.SOCKET_URL || BACKEND_URL.replace(/\/api\/?$/, '');
+
 let runnerId = null;
 let status = 'IDLE';
 let currentTask = null; // Stores task ID
 let runnerConfig = null;
+let socket = null;
+let isConnectedWs = false;
 
-async function registerRunner() {
-  try {
-    const sysInfo = await getSystemInfo();
-    runnerConfig = sysInfo;
-    console.log(`Registering runner with backend...`);
-    console.log(`Allocated resources: ${sysInfo.cpuCores} Cores, ${sysInfo.memoryMB} MB RAM, Docker: ${sysInfo.docker}`);
-    
-    const response = await axios.post(`${BACKEND_URL}/runners/register`, sysInfo);
-    runnerId = response.data.runnerId;
-    console.log(`Successfully registered! Runner ID: ${runnerId}, Name: ${response.data.name}`);
-    
-    // Start heartbeat loop
-    setInterval(sendHeartbeat, 10000); // every 10 seconds
-    // Start polling for tasks
-    setInterval(pollForTasks, 5000); // every 5 seconds
-  } catch (error) {
-    console.error('Failed to register runner:', error.message);
-    // Retry registration
-    setTimeout(registerRunner, 5000);
+async function executeTask(task) {
+  console.log(`\n>>> Received Task: ${task.name} (${task._id})`);
+  console.log(`>>> Command: ${task.command}`);
+
+  status = 'BUSY';
+  currentTask = task._id;
+
+  if (isConnectedWs && socket) {
+    socket.emit('task:started', { taskId: task._id, runnerId });
   }
-}
 
-async function sendHeartbeat() {
-  if (!runnerId) return;
-  
-  try {
-    await axios.post(`${BACKEND_URL}/runners/${runnerId}/heartbeat`, {
-      status,
-      currentTask
+  // Execute the task with resource limits and real-time streaming log callback
+  const result = await runInDocker(
+    task.image,
+    task.command,
+    runnerConfig.cpuCores,
+    runnerConfig.memoryMB,
+    task.pipelineRunId, // Added for Artifact Passing!
+    (logChunk) => {
+      if (isConnectedWs && socket) {
+        socket.emit('task:log', { taskId: task._id, runnerId, ...logChunk });
+      }
+    }
+  );
+
+  console.log(`<<< Task Completed. Success: ${result.success}, ExitCode: ${result.exitCode}, Duration: ${result.durationMs}ms`);
+
+  // Submit result via WebSocket if connected, otherwise via HTTP fallback
+  if (isConnectedWs && socket) {
+    socket.emit('task:result', {
+      ...result,
+      taskId: task._id,
+      runnerId
     });
-    console.log(`Heartbeat sent. Status: ${status}`);
-  } catch (error) {
-    console.error('Failed to send heartbeat:', error.message);
-  }
-}
-
-async function pollForTasks() {
-  // Only ask for a task if we are IDLE
-  if (!runnerId || status !== 'IDLE') return;
-
-  try {
-    const response = await axios.get(`${BACKEND_URL}/tasks/next/${runnerId}`);
-    
-    // 204 No Content means no tasks available
-    if (response.status === 200 && response.data) {
-      const task = response.data;
-      console.log(`\n>>> Received Task: ${task.name} (${task._id})`);
-      console.log(`>>> Command: ${task.command}`);
-      
-      status = 'BUSY';
-      currentTask = task._id;
-      
-      // Execute the task with resource limits
-      const result = await runInDocker(task.image, task.command, runnerConfig.cpuCores, runnerConfig.memoryMB);
-      
-      console.log(`<<< Task Completed. Success: ${result.success}, ExitCode: ${result.exitCode}, Duration: ${result.durationMs}ms`);
-      
-      // Submit result
+  } else {
+    try {
       await axios.post(`${BACKEND_URL}/tasks/${task._id}/result`, {
         ...result,
         runnerId
       });
-      
-      status = 'IDLE';
-      currentTask = null;
+    } catch (err) {
+      console.error('Failed to submit result via HTTP:', err.message);
     }
+  }
+
+  status = 'IDLE';
+  currentTask = null;
+}
+
+async function startRunner() {
+  try {
+    const sysInfo = await getSystemInfo();
+    runnerConfig = sysInfo;
+    console.log('Starting Runner Agent...');
+    console.log(`Allocated resources: ${sysInfo.cpuCores} Cores, ${sysInfo.memoryMB} MB RAM, Docker: ${sysInfo.docker}`);
+
+    // Connect via WebSocket
+    console.log(`Connecting to WebSocket server at ${SOCKET_URL}...`);
+    socket = io(SOCKET_URL, {
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 2000
+    });
+
+    socket.on('connect', () => {
+      console.log(`Connected to WebSocket gateway (${socket.id}). Registering...`);
+      isConnectedWs = true;
+      socket.emit('runner:register', sysInfo);
+    });
+
+    socket.on('runner:registered', (data) => {
+      runnerId = data.runnerId;
+      console.log(`Successfully registered via WebSocket! Runner ID: ${runnerId}, Name: ${data.name}`);
+    });
+
+    // Real-time task dispatch directly from Backend Scheduler
+    socket.on('task:assign', async (task) => {
+      if (status !== 'IDLE') {
+        console.warn(`[Warning] Task assigned while busy. Ignoring task ${task._id}`);
+        return;
+      }
+      await executeTask(task);
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log(`Disconnected from WebSocket (${reason}).`);
+      isConnectedWs = false;
+    });
+
+    socket.on('connect_error', (error) => {
+      console.log(`WebSocket connection error: ${error.message}.`);
+      isConnectedWs = false;
+    });
+
+    // Periodic heartbeat to refresh MongoDB runner status
+    setInterval(() => {
+      if (isConnectedWs && socket && runnerId) {
+        socket.emit('runner:heartbeat', { runnerId, status, currentTask });
+      }
+    }, 10000);
+
+    // Fallback polling (active only if WebSocket is disconnected)
+    setInterval(pollForTasksFallback, 5000);
+
   } catch (error) {
-    console.error('Error polling for tasks:', error.message);
+    console.error('Failed to start runner:', error.message);
+    setTimeout(startRunner, 5000);
   }
 }
 
-// Start
-console.log('Starting Runner Agent...');
-registerRunner();
+async function pollForTasksFallback() {
+  // Only fallback to HTTP if WebSocket is not connected and runner is registered & idle
+  if (isConnectedWs || !runnerId || status !== 'IDLE') return;
+
+  try {
+    const response = await axios.get(`${BACKEND_URL}/tasks/next/${runnerId}`);
+    if (response.status === 200 && response.data) {
+      await executeTask(response.data);
+    }
+  } catch (error) {
+    // Ignore polling errors in fallback mode
+  }
+}
+
+// Start Runner
+startRunner();
 
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down runner gracefully...');
+  if (socket) {
+    socket.disconnect();
+  }
   process.exit();
 });
