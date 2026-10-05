@@ -91,15 +91,21 @@ pipeline:
       dependsOn:
         - install
       cpus: 2
-    - name: test
-      command: echo "Running tests..." && sleep 2
+    - name: test-frontend
+      command: echo "Running Frontend tests..." && sleep 5
+      dependsOn:
+        - build
+      cpus: 2
+    - name: test-backend
+      command: echo "Running Backend tests..." && sleep 5
       dependsOn:
         - build
       cpus: 2
     - name: deploy
       command: echo "Deploying to prod!" && sleep 2
       dependsOn:
-        - test
+        - test-frontend
+        - test-backend
       cpus: 1
     `;
 
@@ -113,6 +119,69 @@ pipeline:
     res.json({ message: 'Demo setup complete', pipelineId: pipeline._id });
   } catch(err) {
     res.status(500).json({ error: 'Failed demo setup' });
+  }
+});
+
+// Setup a CUSTOM project and pipeline (from React Frontend)
+router.post('/setup-custom', async (req, res) => {
+  try {
+    const { name, repository, yamlDefinition } = req.body;
+
+    const project = new Project({
+      name: name,
+      repository: repository
+    });
+    await project.save();
+
+    const pipeline = new Pipeline({
+      name: name + '-pipeline',
+      projectId: project._id,
+      yamlDefinition: yamlDefinition
+    });
+    await pipeline.save();
+
+    // WEBHOOK AUTOMATION: If user is logged in, attach the webhook to GitHub!
+    if (req.user && req.user.accessToken && process.env.NGROK_URL) {
+      try {
+        // Parse "https://github.com/owner/repo.git" -> "owner/repo"
+        const repoPath = repository.replace('https://github.com/', '').replace('.git', '');
+        
+        console.log(`[Webhook] Attempting to create webhook for ${repoPath}...`);
+        
+        const githubRes = await fetch(`https://api.github.com/repos/${repoPath}/hooks`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${req.user.accessToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            name: 'web',
+            active: true,
+            events: ['push'],
+            config: {
+              url: `${process.env.NGROK_URL}/api/webhooks/github`,
+              content_type: 'json',
+              insecure_ssl: '0'
+            }
+          })
+        });
+        
+        if (githubRes.ok) {
+          console.log('[Webhook] Successfully attached webhook to GitHub repository!');
+        } else {
+          const errData = await githubRes.json();
+          console.error('[Webhook] Failed to attach webhook:', errData);
+        }
+      } catch (webhookErr) {
+        console.error('[Webhook] Error making GitHub API request:', webhookErr);
+      }
+    }
+
+    res.json({ message: 'Custom setup complete', pipelineId: pipeline._id });
+  } catch(err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed custom setup' });
   }
 });
 

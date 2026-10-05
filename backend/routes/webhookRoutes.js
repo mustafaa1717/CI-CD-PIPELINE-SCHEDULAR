@@ -34,14 +34,21 @@ router.post('/github', async (req, res) => {
     console.log(`\n[Webhook] Received push event for repo: ${repoUrlStr}, branch: ${branch}, commit: ${commitSha}`);
 
     // 2. Find the project
-    const project = await Project.findOne({ 
-      repository: { $regex: new RegExp(repository.name, 'i') }, // Simple match for prototype
+    let project = await Project.findOne({ 
+      repository: { $regex: new RegExp(repository.name, 'i') }, 
       branch: branch
     });
 
+    // Fallback if branch name differs (e.g., master vs main)
     if (!project) {
-      console.log(`[Webhook] No project found matching repository and branch.`);
-      return res.status(404).json({ error: 'Project not found for this repository and branch' });
+      project = await Project.findOne({ 
+        repository: { $regex: new RegExp(repository.name, 'i') }
+      });
+    }
+
+    if (!project) {
+      console.log(`[Webhook] No project found matching repository ${repository.name}.`);
+      return res.status(404).json({ error: 'Project not found for this repository' });
     }
 
     // 3. Find the pipeline associated with this project

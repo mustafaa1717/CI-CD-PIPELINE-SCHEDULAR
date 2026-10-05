@@ -1,5 +1,6 @@
 const Task = require('./models/Task');
 const Runner = require('./models/Runner');
+const { assignTaskToRunner, broadcast } = require('./socket');
 
 async function runScheduler() {
   try {
@@ -42,11 +43,13 @@ async function runScheduler() {
     
     for (const task of readyTasks) {
       // Find eligible runners: ONLINE/IDLE, sufficient capacity
+      // BEST-FIT ALGORITHM: Sort eligible runners by smallest available CPU and Memory first
+      // This ensures we don't waste massive servers on tiny tasks.
       const eligibleRunners = await Runner.find({
         status: 'IDLE',
         cpuCapacity: { $gte: task.requiredCpus },
         memoryCapacity: { $gte: task.requiredMemoryMB }
-      });
+      }).sort({ cpuCapacity: 1, memoryCapacity: 1 });
 
       if (eligibleRunners.length > 0) {
         // Simple selection: Pick the first eligible runner
@@ -68,6 +71,12 @@ async function runScheduler() {
         selectedRunner.status = 'BUSY';
         selectedRunner.currentTask = task._id;
         await selectedRunner.save();
+
+        broadcast('task:status_changed', { taskId: task._id, status: 'QUEUED', runnerId: selectedRunner._id });
+        broadcast('runner:status_changed', { runnerId: selectedRunner._id, status: 'BUSY' });
+
+        // Push immediately if runner is connected via WebSocket
+        assignTaskToRunner(selectedRunner._id.toString(), task);
       }
     }
 

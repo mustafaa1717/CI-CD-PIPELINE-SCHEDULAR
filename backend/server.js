@@ -10,8 +10,34 @@ const webhookRoutes = require('./routes/webhookRoutes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+// HTTP Server & WebSocket initialization
+const http = require('http');
+const server = http.createServer(app);
+const { initSocket } = require('./socket');
+initSocket(server);
+
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
 app.use(express.json());
+
+// --- Authentication Setup ---
+const session = require('express-session');
+const passport = require('passport');
+require('./passport'); // Load our GitHub strategy
+
+app.use(session({
+  secret: 'super-secret-cicd-key',
+  resave: false,
+  saveUninitialized: false
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
+const authRoutes = require('./routes/authRoutes');
+app.use('/auth', authRoutes);
+// ----------------------------
 
 // Routes
 app.use('/api/runners', runnerRoutes);
@@ -28,7 +54,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/cicd-sche
   const { startScheduler } = require('./scheduler');
   startScheduler();
 
-  app.listen(PORT, () => {
+  server.listen(PORT, () => {
     console.log(`Backend server running on port ${PORT}`);
   });
 })

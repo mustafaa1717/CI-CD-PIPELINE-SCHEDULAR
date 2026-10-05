@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Task = require('../models/Task');
 const Runner = require('../models/Runner');
+const { broadcast } = require('../socket');
 
 // Create a new task (For us to test manually)
 router.post('/', async (req, res) => {
@@ -41,6 +42,7 @@ router.get('/next/:runnerId', async (req, res) => {
     );
     
     if (task) {
+      broadcast('task:status_changed', { taskId: task._id, runnerId, status: 'RUNNING' });
       return res.status(200).json(task);
     }
     
@@ -69,6 +71,9 @@ router.post('/:taskId/result', async (req, res) => {
     
     // Free the runner
     await Runner.findByIdAndUpdate(runnerId, { status: 'IDLE', currentTask: null });
+
+    broadcast('task:status_changed', { taskId, runnerId, status, exitCode, durationMs });
+    broadcast('runner:status_changed', { runnerId, status: 'IDLE' });
     
     res.status(200).json({ message: 'Result saved' });
   } catch (err) {

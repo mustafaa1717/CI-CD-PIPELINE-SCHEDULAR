@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Runner = require('../models/Runner');
+const { broadcast } = require('../socket');
 
 // Register a new runner
 router.post('/register', async (req, res) => {
@@ -35,6 +36,12 @@ router.post('/register', async (req, res) => {
       await runner.save();
     }
     
+    broadcast('runner:status_changed', {
+      runnerId: runner._id,
+      name: runner.name,
+      status: 'IDLE'
+    });
+
     res.status(201).json({ 
       message: 'Runner registered successfully', 
       runnerId: runner._id,
