@@ -159,8 +159,41 @@ router.post('/setup-custom', async (req, res) => {
         const match = cleanUrl.match(/github\.com[/:]([^/]+\/[^/]+)/);
         const repoPath = match ? match[1] : cleanUrl.replace(/^https?:\/\/github\.com\//, '');
         
-        console.log(`[Webhook] Using token for user "${authUser.username}" to create webhook on "${repoPath}"...`);
+        console.log(`[Webhook] Checking and updating webhook on "${repoPath}" for user "${authUser.username}"...`);
+        const targetWebhookUrl = `${process.env.NGROK_URL}/api/webhooks/github`;
         
+        // 1. Fetch existing hooks on repository
+        const listHooksRes = await fetch(`https://api.github.com/repos/${repoPath}/hooks`, {
+          headers: {
+            'Authorization': `Bearer ${authUser.accessToken}`,
+            'Accept': 'application/vnd.github.v3+json',
+            'User-Agent': 'CI-CD-Scheduler'
+          }
+        });
+
+        let existingHook = null;
+        if (listHooksRes.ok) {
+          const hooks = await listHooksRes.json();
+          existingHook = Array.isArray(hooks) && hooks.find(h => 
+            h.config && h.config.url && h.config.url.includes('/api/webhooks/github')
+          );
+        }
+
+        if (existingHook) {
+          // 2. Remove old webhook so we can create a clean fresh one
+          console.log(`[Webhook] Found old webhook (ID: ${existingHook.id}). Removing old hook...`);
+          await fetch(`https://api.github.com/repos/${repoPath}/hooks/${existingHook.id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${authUser.accessToken}`,
+              'Accept': 'application/vnd.github.v3+json',
+              'User-Agent': 'CI-CD-Scheduler'
+            }
+          });
+        }
+
+        // 3. Create fresh webhook pointing to the active tunnel
+        console.log(`[Webhook] Creating fresh webhook pointing to ${targetWebhookUrl}...`);
         const githubRes = await fetch(`https://api.github.com/repos/${repoPath}/hooks`, {
           method: 'POST',
           headers: {
@@ -174,7 +207,7 @@ router.post('/setup-custom', async (req, res) => {
             active: true,
             events: ['push'],
             config: {
-              url: `${process.env.NGROK_URL}/api/webhooks/github`,
+              url: targetWebhookUrl,
               content_type: 'json',
               insecure_ssl: '0'
             }
@@ -182,18 +215,13 @@ router.post('/setup-custom', async (req, res) => {
         });
         
         if (githubRes.ok) {
-          console.log('[Webhook] Successfully attached webhook to GitHub repository!');
+          console.log(`[Webhook] Successfully installed fresh webhook pointing to ${targetWebhookUrl}!`);
         } else {
           const errData = await githubRes.json();
-          const errStr = JSON.stringify(errData);
-          if (errStr.includes('Hook already exists') || errStr.includes('already exists')) {
-            console.log('[Webhook] Webhook is already installed and active on GitHub for this repository!');
-          } else {
-            console.error('[Webhook] GitHub rejected webhook creation:', errData.message || errData);
-          }
+          console.error('[Webhook] GitHub rejected webhook creation:', errData.message || errData);
         }
       } catch (webhookErr) {
-        console.error('[Webhook] Error making GitHub API request:', webhookErr.message);
+        console.error('[Webhook] Error setting up GitHub webhook:', webhookErr.message);
       }
     }
 
