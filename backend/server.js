@@ -59,7 +59,7 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/cicd-sche
   const { startScheduler } = require('./scheduler');
   startScheduler();
 
-  server.listen(PORT, () => {
+  server.listen(PORT, '0.0.0.0', () => {
     console.log(`Backend server running on port ${PORT}`);
   });
 })

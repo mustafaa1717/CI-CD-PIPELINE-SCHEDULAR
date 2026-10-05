@@ -1,9 +1,30 @@
 const Task = require('./models/Task');
 const Runner = require('./models/Runner');
-const { assignTaskToRunner, broadcast } = require('./socket');
+const { assignTaskToRunner, broadcast, getConnectedRunnerIds } = require('./socket');
 
 async function runScheduler() {
   try {
+    // 0. HEALTH CHECK & GHOST RUNNER CLEANUP:
+    // Mark any runner as OFFLINE if its heartbeat is older than 25 seconds
+    const staleThreshold = new Date(Date.now() - 25000);
+    await Runner.updateMany(
+      { status: { $in: ['IDLE', 'BUSY'] }, lastHeartbeat: { $lt: staleThreshold } },
+      { status: 'OFFLINE' }
+    );
+
+    // AUTO-RECOVERY: If any task is stuck in QUEUED or RUNNING on an OFFLINE runner, reset it to READY
+    const offlineRunners = await Runner.find({ status: 'OFFLINE' }).select('_id');
+    const offlineRunnerIds = offlineRunners.map(r => r._id);
+    if (offlineRunnerIds.length > 0) {
+      const recovered = await Task.updateMany(
+        { status: { $in: ['QUEUED', 'RUNNING'] }, assignedRunner: { $in: offlineRunnerIds } },
+        { status: 'READY', assignedRunner: null }
+      );
+      if (recovered.modifiedCount > 0) {
+        console.log(`[Scheduler] Auto-recovered ${recovered.modifiedCount} task(s) from offline runners.`);
+      }
+    }
+
     // 1. Resolve Dependencies (WAITING -> READY or BLOCKED)
     const waitingTasks = await Task.find({ status: 'WAITING' }).populate('dependsOn');
     for (const task of waitingTasks) {
@@ -41,15 +62,22 @@ async function runScheduler() {
     // 2. Assign READY tasks to eligible runners (READY -> QUEUED)
     const readyTasks = await Task.find({ status: 'READY' }).sort({ createdAt: 1 });
     
+    // Get list of runner IDs actively connected via WebSocket right now
+    const liveConnectedRunnerIds = getConnectedRunnerIds();
+
     for (const task of readyTasks) {
-      // Find eligible runners: ONLINE/IDLE, sufficient capacity
-      // BEST-FIT ALGORITHM: Sort eligible runners by smallest available CPU and Memory first
-      // This ensures we don't waste massive servers on tiny tasks.
-      const eligibleRunners = await Runner.find({
+      // Find eligible runners: ONLINE/IDLE, sufficient capacity, AND actively connected to WebSocket
+      const runnerQuery = {
         status: 'IDLE',
         cpuCapacity: { $gte: task.requiredCpus },
         memoryCapacity: { $gte: task.requiredMemoryMB }
-      }).sort({ cpuCapacity: 1, memoryCapacity: 1 });
+      };
+
+      if (liveConnectedRunnerIds.length > 0) {
+        runnerQuery._id = { $in: liveConnectedRunnerIds };
+      }
+
+      const eligibleRunners = await Runner.find(runnerQuery).sort({ cpuCapacity: 1, memoryCapacity: 1 });
 
       if (eligibleRunners.length > 0) {
         // Simple selection: Pick the first eligible runner

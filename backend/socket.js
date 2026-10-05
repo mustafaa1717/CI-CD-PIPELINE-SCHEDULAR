@@ -260,9 +260,19 @@ function getIO() {
   return io;
 }
 
+function getConnectedRunnerIds() {
+  return Array.from(runnerSockets.keys());
+}
+
+function isRunnerConnected(runnerId) {
+  return runnerSockets.has(runnerId.toString());
+}
+
 module.exports = {
   initSocket,
   assignTaskToRunner,
   broadcast,
-  getIO
+  getIO,
+  getConnectedRunnerIds,
+  isRunnerConnected
 };

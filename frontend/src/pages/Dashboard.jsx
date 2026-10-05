@@ -116,13 +116,13 @@ export default function Dashboard() {
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                <button onClick={handleSave} style={{ padding: '10px 16px', backgroundColor: '#21262d', color: '#c9d1d9', border: '1px solid #30363d', cursor: 'pointer', borderRadius: '6px', fontWeight: 'bold' }}>
-                  Save Configuration
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                <button onClick={handleSave} style={{ padding: '12px 18px', backgroundColor: '#238636', color: '#ffffff', border: '1px solid rgba(240,246,252,0.1)', cursor: 'pointer', borderRadius: '6px', fontWeight: 'bold', fontSize: '14px' }}>
+                  ⚡ Save & Enable Automated Pipeline
                 </button>
-                <button onClick={handleRun} style={{ padding: '10px 16px', backgroundColor: '#238636', color: '#ffffff', border: '1px solid rgba(240,246,252,0.1)', cursor: 'pointer', borderRadius: '6px', fontWeight: 'bold' }}>
-                  ▶ Run Pipeline Now
-                </button>
+                <span style={{ fontSize: '12px', color: '#8b949e' }}>
+                  ℹ️ Automated mode active: Any <code>git push</code> to this repo will immediately trigger execution without manual clicks.
+                </span>
               </div>
             </div>
           </div>
