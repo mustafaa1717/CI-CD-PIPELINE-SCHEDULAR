@@ -62,6 +62,7 @@ async function runScheduler() {
     // 2. Assign READY tasks to eligible runners (READY -> QUEUED)
     const readyTasks = await Task.find({ status: 'READY' }).sort({ createdAt: 1 });
     
+    const mongoose = require('mongoose');
     // Get list of runner IDs actively connected via WebSocket right now
     const liveConnectedRunnerIds = getConnectedRunnerIds();
 
@@ -74,7 +75,15 @@ async function runScheduler() {
       };
 
       if (liveConnectedRunnerIds.length > 0) {
-        runnerQuery._id = { $in: liveConnectedRunnerIds };
+        runnerQuery._id = { 
+          $in: liveConnectedRunnerIds.map(id => {
+            try { return new mongoose.Types.ObjectId(id); } catch(e) { return id; }
+          })
+        };
+      } else {
+        // If no runners are currently connected via WebSocket, wait for one to connect
+        console.log(`[Scheduler] Task "${task.name}" is READY, waiting for a runner to connect...`);
+        continue;
       }
 
       const eligibleRunners = await Runner.find(runnerQuery).sort({ cpuCapacity: 1, memoryCapacity: 1 });
