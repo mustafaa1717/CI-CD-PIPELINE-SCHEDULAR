@@ -22,7 +22,7 @@ async function getSystemInfo() {
   // Use allocated resources from env vars if provided, otherwise use physical limits
   const cpuCores = process.env.RUNNER_CPUS ? parseFloat(process.env.RUNNER_CPUS) : physicalCores;
   const memoryMB = process.env.RUNNER_MEMORY ? parseInt(process.env.RUNNER_MEMORY, 10) : physicalMemoryMB;
-  const name = process.env.RUNNER_NAME || `Runner-${Math.random().toString(36).substr(2, 5)}`;
+  const name = process.env.RUNNER_NAME || 'Runner-Local-Worker';
   
   return {
     name,

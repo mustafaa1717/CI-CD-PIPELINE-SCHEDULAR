@@ -21,6 +21,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // --- Authentication Setup ---
 const session = require('express-session');

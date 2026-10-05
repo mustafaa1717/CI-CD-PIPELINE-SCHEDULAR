@@ -110,6 +110,11 @@ router.post('/github', async (req, res) => {
     await pipelineRun.save();
 
     console.log(`[Webhook] Pipeline Run ${pipelineRun._id} successfully created and queued!`);
+
+    // Instantly trigger scheduler loop without waiting for the 3-second interval
+    const { runScheduler } = require('../scheduler');
+    runScheduler();
+
     res.status(201).json({ message: 'Pipeline triggered via webhook', runId: pipelineRun._id });
 
   } catch (err) {

@@ -61,12 +61,24 @@ export default function Dashboard() {
     }
   };
 
-  const handleRun = async () => {
-    if (!pipelineId) return alert('Please save the pipeline first!');
+  const handleSimulatePush = async () => {
     try {
-      await axios.post(`http://localhost:3000/api/pipelines/${pipelineId}/run`);
+      setLogs(prev => [...prev, '⚡ [Simulate] Triggering pipeline via GitHub push webhook event...']);
+      const cleanRepo = repoUrl.trim().replace('https://github.com/', '').replace('.git', '');
+      const repoShortName = cleanRepo.split('/')[1] || cleanRepo;
+      await axios.post('http://localhost:3000/api/webhooks/github', {
+        ref: 'refs/heads/main',
+        after: Math.random().toString(36).substring(2, 10),
+        repository: {
+          name: repoShortName,
+          clone_url: repoUrl,
+          html_url: repoUrl
+        }
+      }, {
+        headers: { 'x-github-event': 'push' }
+      });
     } catch (err) {
-      alert('Error running pipeline');
+      alert('Error triggering webhook: ' + (err.response?.data?.error || err.message));
     }
   };
 
@@ -120,8 +132,11 @@ export default function Dashboard() {
                 <button onClick={handleSave} style={{ padding: '12px 18px', backgroundColor: '#238636', color: '#ffffff', border: '1px solid rgba(240,246,252,0.1)', cursor: 'pointer', borderRadius: '6px', fontWeight: 'bold', fontSize: '14px' }}>
                   ⚡ Save & Enable Automated Pipeline
                 </button>
+                <button onClick={handleSimulatePush} style={{ padding: '8px 14px', backgroundColor: '#21262d', color: '#58a6ff', border: '1px solid #30363d', cursor: 'pointer', borderRadius: '6px', fontSize: '13px', fontWeight: '500' }}>
+                  🧪 Test Webhook (Simulate Git Push)
+                </button>
                 <span style={{ fontSize: '12px', color: '#8b949e' }}>
-                  ℹ️ Automated mode active: Any <code>git push</code> to this repo will immediately trigger execution without manual clicks.
+                  ℹ️ Automated mode active: Any real <code>git push</code> or clicking the test button will trigger the pipeline.
                 </span>
               </div>
             </div>

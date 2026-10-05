@@ -127,4 +127,4 @@ function startScheduler() {
   setInterval(runScheduler, 3000); // Run every 3 seconds
 }
 
-module.exports = { startScheduler };
+module.exports = { startScheduler, runScheduler };
