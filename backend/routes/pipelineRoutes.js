@@ -1,11 +1,22 @@
 const express = require('express');
 const router = express.Router();
-const yaml = require('js-yaml');
 const Project = require('../models/Project');
 const Pipeline = require('../models/Pipeline');
 const PipelineRun = require('../models/PipelineRun');
 const Task = require('../models/Task');
 const User = require('../models/User');
+const { validateAndParseDAG } = require('../utils/dagValidator');
+const { runScheduler } = require('../scheduler');
+
+// Validate YAML without saving or running
+router.post('/validate', (req, res) => {
+  const { yamlDefinition } = req.body;
+  const validation = validateAndParseDAG(yamlDefinition);
+  if (!validation.isValid) {
+    return res.status(400).json({ isValid: false, error: validation.error });
+  }
+  res.json(validation);
+});
 
 // Trigger a pipeline run
 router.post('/:pipelineId/run', async (req, res) => {
@@ -14,14 +25,18 @@ router.post('/:pipelineId/run', async (req, res) => {
     const pipeline = await Pipeline.findById(pipelineId);
     if (!pipeline) return res.status(404).json({ error: 'Pipeline not found' });
 
-    // Parse YAML
-    const parsedYaml = yaml.load(pipeline.yamlDefinition);
-    
+    // Validate DAG and detect cycles
+    const validation = validateAndParseDAG(pipeline.yamlDefinition);
+    if (!validation.isValid) {
+      return res.status(400).json({ error: validation.error });
+    }
+
     // Create PipelineRun
     const pipelineRun = new PipelineRun({
       pipelineId: pipeline._id,
       projectId: pipeline.projectId,
-      status: 'RUNNING'
+      status: 'RUNNING',
+      startedAt: new Date()
     });
     await pipelineRun.save();
 
@@ -29,14 +44,15 @@ router.post('/:pipelineId/run', async (req, res) => {
     const taskMap = {}; // { "taskName": TaskObject }
     const createdTasks = [];
 
-    // First pass: Create all tasks in WAITING state
-    for (const taskDef of parsedYaml.pipeline.tasks) {
+    // First pass: Create all tasks in WAITING state with topological stageLevel
+    for (const taskDef of validation.tasks) {
       const task = new Task({
         name: taskDef.name,
         command: taskDef.command,
         image: taskDef.image || 'ubuntu:latest',
         requiredCpus: taskDef.cpus || 1,
         requiredMemoryMB: taskDef.memoryMB || 512,
+        stageLevel: taskDef.stageLevel || 0,
         pipelineRunId: pipelineRun._id,
         status: 'WAITING'
       });
@@ -64,10 +80,18 @@ router.post('/:pipelineId/run', async (req, res) => {
     pipelineRun.tasks = createdTasks.map(t => t.dbTask._id);
     await pipelineRun.save();
 
-    res.status(201).json({ message: 'Pipeline Run started', runId: pipelineRun._id });
+    // Instantly trigger scheduler loop
+    runScheduler();
+
+    res.status(201).json({
+      message: 'Pipeline Run started',
+      runId: pipelineRun._id,
+      totalStages: validation.totalStages,
+      topologicalOrder: validation.topologicalOrder
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed to run pipeline' });
+    res.status(500).json({ error: 'Failed to run pipeline: ' + err.message });
   }
 });
 
@@ -93,12 +117,12 @@ pipeline:
         - install
       cpus: 2
     - name: test-frontend
-      command: echo "Running Frontend tests..." && sleep 5
+      command: echo "Running Frontend tests..." && sleep 4
       dependsOn:
         - build
       cpus: 2
     - name: test-backend
-      command: echo "Running Backend tests..." && sleep 5
+      command: echo "Running Backend tests..." && sleep 4
       dependsOn:
         - build
       cpus: 2
@@ -109,6 +133,11 @@ pipeline:
         - test-backend
       cpus: 1
     `;
+
+    const validation = validateAndParseDAG(yamlDef);
+    if (!validation.isValid) {
+      return res.status(400).json({ error: validation.error });
+    }
 
     const pipeline = new Pipeline({
       name: 'demo-ci-cd',
@@ -128,6 +157,12 @@ router.post('/setup-custom', async (req, res) => {
   try {
     const { name, repository, yamlDefinition } = req.body;
 
+    // Validate DAG & detect cycles BEFORE saving!
+    const validation = validateAndParseDAG(yamlDefinition);
+    if (!validation.isValid) {
+      return res.status(400).json({ error: validation.error });
+    }
+
     const project = new Project({
       name: name,
       repository: repository
@@ -144,7 +179,6 @@ router.post('/setup-custom', async (req, res) => {
     // WEBHOOK AUTOMATION: If user is logged in (or saved in DB), attach the webhook to GitHub!
     let authUser = req.user;
     if (!authUser || !authUser.accessToken) {
-      // Fallback: Retrieve the authenticated user from MongoDB
       authUser = await User.findOne().sort({ _id: -1 });
     }
 
@@ -154,7 +188,6 @@ router.post('/setup-custom', async (req, res) => {
       console.warn('[Webhook] NGROK_URL not configured in backend/.env.');
     } else {
       try {
-        // Parse "https://github.com/owner/repo.git" or "https://github.com/owner/repo/" -> "owner/repo"
         const cleanUrl = repository.trim().replace(/\/+$/, '').replace(/\.git$/, '');
         const match = cleanUrl.match(/github\.com[/:]([^/]+\/[^/]+)/);
         const repoPath = match ? match[1] : cleanUrl.replace(/^https?:\/\/github\.com\//, '');
@@ -162,7 +195,6 @@ router.post('/setup-custom', async (req, res) => {
         console.log(`[Webhook] Checking and updating webhook on "${repoPath}" for user "${authUser.username}"...`);
         const targetWebhookUrl = `${process.env.NGROK_URL}/api/webhooks/github`;
         
-        // 1. Fetch existing hooks on repository
         const listHooksRes = await fetch(`https://api.github.com/repos/${repoPath}/hooks`, {
           headers: {
             'Authorization': `Bearer ${authUser.accessToken}`,
@@ -180,7 +212,6 @@ router.post('/setup-custom', async (req, res) => {
         }
 
         if (existingHook) {
-          // 2. Remove old webhook so we can create a clean fresh one
           console.log(`[Webhook] Found old webhook (ID: ${existingHook.id}). Removing old hook...`);
           await fetch(`https://api.github.com/repos/${repoPath}/hooks/${existingHook.id}`, {
             method: 'DELETE',
@@ -192,7 +223,6 @@ router.post('/setup-custom', async (req, res) => {
           });
         }
 
-        // 3. Create fresh webhook pointing to the active tunnel
         console.log(`[Webhook] Creating fresh webhook pointing to ${targetWebhookUrl}...`);
         const githubRes = await fetch(`https://api.github.com/repos/${repoPath}/hooks`, {
           method: 'POST',
@@ -225,10 +255,62 @@ router.post('/setup-custom', async (req, res) => {
       }
     }
 
-    res.json({ message: 'Custom setup complete', pipelineId: pipeline._id });
+    res.json({
+      message: 'Custom setup complete',
+      pipelineId: pipeline._id,
+      totalStages: validation.totalStages,
+      topologicalOrder: validation.topologicalOrder
+    });
   } catch(err) {
     console.error(err);
-    res.status(500).json({ error: 'Failed custom setup' });
+    res.status(500).json({ error: 'Failed custom setup: ' + err.message });
+  }
+});
+
+// Get the latest pipeline run with populated tasks
+router.get('/runs/latest', async (req, res) => {
+  try {
+    const latestRun = await PipelineRun.findOne()
+      .sort({ createdAt: -1 })
+      .populate('pipelineId')
+      .populate({
+        path: 'tasks',
+        populate: [
+          { path: 'assignedRunner', select: 'name hostname' },
+          { path: 'dependsOn', select: 'name status' }
+        ]
+      });
+
+    if (!latestRun) {
+      return res.status(404).json({ message: 'No pipeline runs found' });
+    }
+
+    res.json(latestRun);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch latest pipeline run' });
+  }
+});
+
+// Get a specific pipeline run by ID
+router.get('/runs/:runId', async (req, res) => {
+  try {
+    const run = await PipelineRun.findById(req.params.runId)
+      .populate('pipelineId')
+      .populate({
+        path: 'tasks',
+        populate: [
+          { path: 'assignedRunner', select: 'name hostname' },
+          { path: 'dependsOn', select: 'name status' }
+        ]
+      });
+
+    if (!run) {
+      return res.status(404).json({ error: 'Pipeline run not found' });
+    }
+
+    res.json(run);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch pipeline run' });
   }
 });
 

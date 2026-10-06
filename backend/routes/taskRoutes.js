@@ -52,29 +52,55 @@ router.get('/next/:runnerId', async (req, res) => {
   }
 });
 
-// Runner submits task result
+// Runner submits task result (HTTP fallback)
 router.post('/:taskId/result', async (req, res) => {
   try {
     const { taskId } = req.params;
     const { exitCode, durationMs, stdout, stderr, success, runnerId } = req.body;
+    const { checkAndUpdatePipelineRun } = require('../utils/pipelineManager');
+    const { runScheduler } = require('../scheduler');
     
     const status = success ? 'SUCCESS' : 'FAILED';
-    const logs = `--- STDOUT ---\n${stdout}\n--- STDERR ---\n${stderr}`;
+    const logs = `--- STDOUT ---\n${stdout || ''}\n--- STDERR ---\n${stderr || ''}`;
     
-    await Task.findByIdAndUpdate(taskId, {
+    const updatedTask = await Task.findByIdAndUpdate(taskId, {
       status,
       exitCode,
       durationMs,
       logs,
       completedAt: Date.now()
-    });
+    }, { returnDocument: 'after' });
     
-    // Free the runner
-    await Runner.findByIdAndUpdate(runnerId, { status: 'IDLE', currentTask: null });
+    // Release runner resources dynamically
+    const runner = await Runner.findById(runnerId);
+    if (runner) {
+      const reqCpus = updatedTask?.requiredCpus || 1;
+      const reqMem = updatedTask?.requiredMemoryMB || 512;
+
+      runner.usedCpus = Math.max(0, (runner.usedCpus || 0) - reqCpus);
+      runner.usedMemoryMB = Math.max(0, (runner.usedMemoryMB || 0) - reqMem);
+      runner.activeTasks = (runner.activeTasks || []).filter(id => id.toString() !== taskId.toString());
+      runner.status = runner.activeTasks.length > 0 ? 'BUSY' : 'IDLE';
+      runner.currentTask = runner.activeTasks.length > 0 ? runner.activeTasks[0].toString() : null;
+      await runner.save();
+
+      broadcast('runner:status_changed', {
+        runnerId: runner._id,
+        status: runner.status,
+        usedCpus: runner.usedCpus,
+        usedMemoryMB: runner.usedMemoryMB,
+        activeTaskCount: runner.activeTasks.length
+      });
+    }
 
     broadcast('task:status_changed', { taskId, runnerId, status, exitCode, durationMs });
-    broadcast('runner:status_changed', { runnerId, status: 'IDLE' });
     
+    if (updatedTask && updatedTask.pipelineRunId) {
+      await checkAndUpdatePipelineRun(updatedTask.pipelineRunId);
+    }
+
+    runScheduler();
+
     res.status(200).json({ message: 'Result saved' });
   } catch (err) {
     console.error('Failed to save result:', err);

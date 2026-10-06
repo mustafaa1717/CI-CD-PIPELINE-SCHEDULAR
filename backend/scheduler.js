@@ -1,16 +1,36 @@
+const mongoose = require('mongoose');
 const Task = require('./models/Task');
 const Runner = require('./models/Runner');
 const { assignTaskToRunner, broadcast, getConnectedRunnerIds } = require('./socket');
+const { checkAndUpdatePipelineRun } = require('./utils/pipelineManager');
 
 async function runScheduler() {
   try {
     // 0. HEALTH CHECK & GHOST RUNNER CLEANUP:
     // Mark any runner as OFFLINE if its heartbeat is older than 25 seconds
     const staleThreshold = new Date(Date.now() - 25000);
-    await Runner.updateMany(
-      { status: { $in: ['IDLE', 'BUSY'] }, lastHeartbeat: { $lt: staleThreshold } },
-      { status: 'OFFLINE' }
-    );
+    const staleRunners = await Runner.find({
+      status: { $in: ['IDLE', 'BUSY'] },
+      lastHeartbeat: { $lt: staleThreshold }
+    });
+
+    if (staleRunners.length > 0) {
+      for (const r of staleRunners) {
+        r.status = 'OFFLINE';
+        r.usedCpus = 0;
+        r.usedMemoryMB = 0;
+        r.activeTasks = [];
+        r.currentTask = null;
+        await r.save();
+        broadcast('runner:status_changed', {
+          runnerId: r._id,
+          name: r.name,
+          status: 'OFFLINE',
+          usedCpus: 0,
+          usedMemoryMB: 0
+        });
+      }
+    }
 
     // AUTO-RECOVERY: If any task is stuck in QUEUED or RUNNING on an OFFLINE runner, reset it to READY
     const offlineRunners = await Runner.find({ status: 'OFFLINE' }).select('_id');
@@ -31,7 +51,8 @@ async function runScheduler() {
       if (!task.dependsOn || task.dependsOn.length === 0) {
         task.status = 'READY';
         await task.save();
-        console.log(`[Scheduler] Task ${task.name} is now READY (no dependencies)`);
+        console.log(`[Scheduler] Task "${task.name}" is now READY (no dependencies)`);
+        broadcast('task:status_changed', { taskId: task._id, status: 'READY' });
         continue;
       }
       
@@ -39,7 +60,7 @@ async function runScheduler() {
       let anyDependencyFailed = false;
 
       for (const dep of task.dependsOn) {
-        if (dep.status === 'FAILED') {
+        if (dep.status === 'FAILED' || dep.status === 'BLOCKED') {
           anyDependencyFailed = true;
           break;
         }
@@ -51,68 +72,101 @@ async function runScheduler() {
       if (anyDependencyFailed) {
         task.status = 'BLOCKED';
         await task.save();
-        console.log(`[Scheduler] Task ${task.name} is BLOCKED due to failed dependencies.`);
+        console.log(`[Scheduler] Task "${task.name}" is BLOCKED due to failed dependencies.`);
+        broadcast('task:status_changed', { taskId: task._id, status: 'BLOCKED' });
+        // Check if this failure causes the parent pipeline to terminate
+        await checkAndUpdatePipelineRun(task.pipelineRunId);
       } else if (allDependenciesMet) {
         task.status = 'READY';
         await task.save();
-        console.log(`[Scheduler] Task ${task.name} is now READY.`);
+        console.log(`[Scheduler] Task "${task.name}" is now READY.`);
+        broadcast('task:status_changed', { taskId: task._id, status: 'READY' });
       }
     }
 
-    // 2. Assign READY tasks to eligible runners (READY -> QUEUED)
+    // 2. Assign READY tasks to eligible runners with Multi-Task Resource Awareness
     const readyTasks = await Task.find({ status: 'READY' }).sort({ createdAt: 1 });
-    
-    const mongoose = require('mongoose');
-    // Get list of runner IDs actively connected via WebSocket right now
     const liveConnectedRunnerIds = getConnectedRunnerIds();
 
+    if (readyTasks.length > 0 && liveConnectedRunnerIds.length === 0) {
+      // Waiting for runners to connect
+      return;
+    }
+
     for (const task of readyTasks) {
-      // Find eligible runners: ONLINE/IDLE, sufficient capacity, AND actively connected to WebSocket
-      const runnerQuery = {
-        status: 'IDLE',
-        cpuCapacity: { $gte: task.requiredCpus },
-        memoryCapacity: { $gte: task.requiredMemoryMB }
-      };
+      const liveObjectIds = liveConnectedRunnerIds.map(id => {
+        try { return new mongoose.Types.ObjectId(id); } catch (e) { return id; }
+      });
 
-      if (liveConnectedRunnerIds.length > 0) {
-        runnerQuery._id = { 
-          $in: liveConnectedRunnerIds.map(id => {
-            try { return new mongoose.Types.ObjectId(id); } catch(e) { return id; }
-          })
-        };
-      } else {
-        // If no runners are currently connected via WebSocket, wait for one to connect
-        console.log(`[Scheduler] Task "${task.name}" is READY, waiting for a runner to connect...`);
-        continue;
-      }
+      // Find all live runners that are not OFFLINE
+      const activeRunners = await Runner.find({
+        _id: { $in: liveObjectIds },
+        status: { $in: ['IDLE', 'BUSY'] }
+      });
 
-      const eligibleRunners = await Runner.find(runnerQuery).sort({ cpuCapacity: 1, memoryCapacity: 1 });
+      // Filter runners by remaining dynamic capacity (Multi-Task Concurrency)
+      const eligibleRunners = activeRunners.filter(runner => {
+        const availableCpus = runner.cpuCapacity - (runner.usedCpus || 0);
+        const availableMemoryMB = runner.memoryCapacity - (runner.usedMemoryMB || 0);
+        const reqCpus = task.requiredCpus || 1;
+        const reqMem = task.requiredMemoryMB || 512;
+        return availableCpus >= reqCpus && availableMemoryMB >= reqMem;
+      });
 
       if (eligibleRunners.length > 0) {
-        // Simple selection: Pick the first eligible runner
+        // Load balancing heuristic: Pick runner with greatest remaining CPU capacity
+        eligibleRunners.sort((a, b) => {
+          const remA = a.cpuCapacity - (a.usedCpus || 0);
+          const remB = b.cpuCapacity - (b.usedCpus || 0);
+          return remB - remA;
+        });
+
         const selectedRunner = eligibleRunners[0];
-        
+
+        const reqCpus = task.requiredCpus || 1;
+        const reqMem = task.requiredMemoryMB || 512;
+
         console.log(`\n[Scheduler] -----------------------------`);
-        console.log(`[Scheduler] SCHEDULING DECISION MADE:`);
-        console.log(`[Scheduler] Task: ${task.name} requires ${task.requiredCpus} CPUs, ${task.requiredMemoryMB} MB RAM`);
-        console.log(`[Scheduler] Eligible Runners Found: ${eligibleRunners.length}`);
-        console.log(`[Scheduler] Selected Runner: ${selectedRunner.name} (has ${selectedRunner.cpuCapacity} CPUs, ${selectedRunner.memoryCapacity} MB RAM)`);
+        console.log(`[Scheduler] RESOURCE-AWARE TASK ASSIGNMENT:`);
+        console.log(`[Scheduler] Task: "${task.name}" requires ${reqCpus} CPUs, ${reqMem} MB RAM`);
+        console.log(`[Scheduler] Selected Runner: ${selectedRunner.name}`);
+        console.log(`[Scheduler] Runner Capacity: ${selectedRunner.cpuCapacity} CPUs, ${selectedRunner.memoryCapacity} MB RAM`);
+        console.log(`[Scheduler] Allocated: ${selectedRunner.usedCpus || 0} + ${reqCpus} CPUs | ${selectedRunner.usedMemoryMB || 0} + ${reqMem} MB RAM`);
         console.log(`[Scheduler] -----------------------------\n`);
-        
+
+        // Allocate resources
+        selectedRunner.usedCpus = (selectedRunner.usedCpus || 0) + reqCpus;
+        selectedRunner.usedMemoryMB = (selectedRunner.usedMemoryMB || 0) + reqMem;
+        if (!selectedRunner.activeTasks) selectedRunner.activeTasks = [];
+        selectedRunner.activeTasks.push(task._id);
+        selectedRunner.status = 'BUSY';
+        selectedRunner.currentTask = task._id.toString();
+        await selectedRunner.save();
+
         // Update task
         task.status = 'QUEUED';
         task.assignedRunner = selectedRunner._id;
         await task.save();
-        
-        // Update runner
-        selectedRunner.status = 'BUSY';
-        selectedRunner.currentTask = task._id;
-        await selectedRunner.save();
 
-        broadcast('task:status_changed', { taskId: task._id, status: 'QUEUED', runnerId: selectedRunner._id });
-        broadcast('runner:status_changed', { runnerId: selectedRunner._id, status: 'BUSY' });
+        broadcast('task:status_changed', {
+          taskId: task._id,
+          status: 'QUEUED',
+          runnerId: selectedRunner._id,
+          runnerName: selectedRunner.name
+        });
 
-        // Push immediately if runner is connected via WebSocket
+        broadcast('runner:status_changed', {
+          runnerId: selectedRunner._id,
+          name: selectedRunner.name,
+          status: selectedRunner.status,
+          usedCpus: selectedRunner.usedCpus,
+          usedMemoryMB: selectedRunner.usedMemoryMB,
+          cpuCapacity: selectedRunner.cpuCapacity,
+          memoryCapacity: selectedRunner.memoryCapacity,
+          activeTaskCount: selectedRunner.activeTasks.length
+        });
+
+        // Dispatch task immediately via WebSocket
         assignTaskToRunner(selectedRunner._id.toString(), task);
       }
     }

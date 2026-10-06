@@ -60,15 +60,21 @@ router.post('/github', async (req, res) => {
 
     console.log(`[Webhook] Triggering pipeline: ${pipeline.name}`);
 
-    // 4. Parse YAML and create PipelineRun (Same logic as manual trigger)
-    const parsedYaml = yaml.load(pipeline.yamlDefinition);
+    // 4. Parse & Validate YAML and create PipelineRun
+    const { validateAndParseDAG } = require('../utils/dagValidator');
+    const validation = validateAndParseDAG(pipeline.yamlDefinition);
+    if (!validation.isValid) {
+      console.error(`[Webhook] Pipeline YAML invalid: ${validation.error}`);
+      return res.status(400).json({ error: validation.error });
+    }
     
     const pipelineRun = new PipelineRun({
       pipelineId: pipeline._id,
       projectId: pipeline.projectId,
       status: 'RUNNING',
       commitSha: commitSha,
-      triggerType: 'github-webhook'
+      triggerType: 'github-webhook',
+      startedAt: new Date()
     });
     await pipelineRun.save();
 
@@ -76,13 +82,14 @@ router.post('/github', async (req, res) => {
     const createdTasks = [];
 
     // Create tasks
-    for (const taskDef of parsedYaml.pipeline.tasks) {
+    for (const taskDef of validation.tasks) {
       const task = new Task({
         name: taskDef.name,
         command: taskDef.command,
         image: taskDef.image || 'ubuntu:latest',
         requiredCpus: taskDef.cpus || 1,
         requiredMemoryMB: taskDef.memoryMB || 512,
+        stageLevel: taskDef.stageLevel || 0,
         pipelineRunId: pipelineRun._id,
         status: 'WAITING'
       });

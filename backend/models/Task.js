@@ -7,6 +7,7 @@ const taskSchema = new mongoose.Schema({
   status: { type: String, enum: ['WAITING', 'READY', 'QUEUED', 'RUNNING', 'SUCCESS', 'FAILED', 'BLOCKED'], default: 'WAITING' },
   pipelineRunId: { type: mongoose.Schema.Types.ObjectId, ref: 'PipelineRun', default: null },
   dependsOn: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Task' }],
+  stageLevel: { type: Number, default: 0 },
   requiredCpus: { type: Number, default: 1 },
   requiredMemoryMB: { type: Number, default: 512 },
   assignedRunner: { type: mongoose.Schema.Types.ObjectId, ref: 'Runner', default: null },

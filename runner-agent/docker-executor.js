@@ -79,4 +79,32 @@ async function runInDocker(image = 'ubuntu:latest', command, cpus = null, memory
   });
 }
 
-module.exports = { runInDocker };
+/**
+ * Removes the Docker volume associated with a finished pipeline run.
+ * @param {string} workspaceId 
+ * @returns {Promise<boolean>}
+ */
+async function cleanupWorkspaceVolume(workspaceId) {
+  if (!workspaceId) return false;
+  return new Promise((resolve) => {
+    const volumeName = `cicd-workspace-${workspaceId}`;
+    console.log(`[Docker Executor] Removing temporary Docker volume: ${volumeName}`);
+    const dockerProcess = spawn('docker', ['volume', 'rm', '-f', volumeName]);
+
+    dockerProcess.on('close', (code) => {
+      if (code === 0) {
+        console.log(`[Docker Executor] Volume ${volumeName} successfully deleted.`);
+      } else {
+        console.log(`[Docker Executor] Volume ${volumeName} cleanup exited with code ${code}.`);
+      }
+      resolve(code === 0);
+    });
+
+    dockerProcess.on('error', (err) => {
+      console.warn(`[Docker Executor] Error removing volume ${volumeName}:`, err.message);
+      resolve(false);
+    });
+  });
+}
+
+module.exports = { runInDocker, cleanupWorkspaceVolume };

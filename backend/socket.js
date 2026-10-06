@@ -1,6 +1,7 @@
 const { Server } = require('socket.io');
 const Runner = require('./models/Runner');
 const Task = require('./models/Task');
+const { checkAndUpdatePipelineRun } = require('./utils/pipelineManager');
 
 let io = null;
 
@@ -31,8 +32,12 @@ function initSocket(server) {
 
         let runner = await Runner.findOne({ name });
         if (runner) {
+          runner.hostname = hostname || runner.hostname;
           runner.cpuCapacity = cpuCores;
           runner.memoryCapacity = memoryMB;
+          runner.usedCpus = 0;
+          runner.usedMemoryMB = 0;
+          runner.activeTasks = [];
           runner.gpuAvailable = gpu || false;
           runner.dockerAvailable = docker || false;
           runner.capabilities = capabilities || [];
@@ -42,9 +47,12 @@ function initSocket(server) {
         } else {
           runner = new Runner({
             name,
-            hostname,
+            hostname: hostname || 'unknown-host',
             cpuCapacity: cpuCores,
             memoryCapacity: memoryMB,
+            usedCpus: 0,
+            usedMemoryMB: 0,
+            activeTasks: [],
             gpuAvailable: gpu || false,
             dockerAvailable: docker || false,
             capabilities: capabilities || [],
@@ -72,11 +80,16 @@ function initSocket(server) {
           socket.emit('runner:registered', responsePayload);
         }
 
-        // Broadcast runner status change to any connected dashboards
+        // Broadcast runner status change to connected dashboards
         io.emit('runner:status_changed', {
           runnerId: runner._id,
           name: runner.name,
-          status: 'IDLE'
+          status: 'IDLE',
+          cpuCapacity: runner.cpuCapacity,
+          memoryCapacity: runner.memoryCapacity,
+          usedCpus: 0,
+          usedMemoryMB: 0,
+          activeTaskCount: 0
         });
       } catch (err) {
         console.error('[Socket] Error in runner:register:', err);
@@ -90,11 +103,13 @@ function initSocket(server) {
         const runnerId = socketToRunner.get(socket.id) || data.runnerId;
         if (!runnerId) return;
 
-        await Runner.findByIdAndUpdate(runnerId, {
-          lastHeartbeat: Date.now(),
-          status: data.status || 'IDLE',
-          currentTask: data.currentTask || null
-        });
+        const updateData = {
+          lastHeartbeat: Date.now()
+        };
+        if (data.status) updateData.status = data.status;
+        if (data.currentTask !== undefined) updateData.currentTask = data.currentTask;
+
+        await Runner.findByIdAndUpdate(runnerId, updateData);
       } catch (err) {
         console.error('[Socket] Error in runner:heartbeat:', err);
       }
@@ -136,24 +151,43 @@ function initSocket(server) {
         const status = success ? 'SUCCESS' : 'FAILED';
         const logs = `--- STDOUT ---\n${stdout || ''}\n--- STDERR ---\n${stderr || ''}`;
 
-        console.log(`[Socket] Task ${taskId} completed with status: ${status} (exitCode: ${exitCode})`);
+        console.log(`[Socket] Task ${taskId} completed with status: ${status} (exitCode: ${exitCode}) in ${durationMs}ms`);
 
-        await Task.findByIdAndUpdate(taskId, {
+        const updatedTask = await Task.findByIdAndUpdate(taskId, {
           status,
           exitCode,
           durationMs,
           logs,
           completedAt: Date.now()
-        });
+        }, { returnDocument: 'after' });
 
-        // Free runner
-        await Runner.findByIdAndUpdate(runnerId, {
-          status: 'IDLE',
-          currentTask: null,
-          lastHeartbeat: Date.now()
-        });
+        // Dynamic resource release for runner (Multi-Task Concurrency)
+        const runner = await Runner.findById(runnerId);
+        if (runner) {
+          const reqCpus = updatedTask?.requiredCpus || 1;
+          const reqMem = updatedTask?.requiredMemoryMB || 512;
 
-        // Notify UI/dashboards
+          runner.usedCpus = Math.max(0, (runner.usedCpus || 0) - reqCpus);
+          runner.usedMemoryMB = Math.max(0, (runner.usedMemoryMB || 0) - reqMem);
+          runner.activeTasks = (runner.activeTasks || []).filter(id => id.toString() !== taskId.toString());
+          runner.status = runner.activeTasks.length > 0 ? 'BUSY' : 'IDLE';
+          runner.currentTask = runner.activeTasks.length > 0 ? runner.activeTasks[0].toString() : null;
+          runner.lastHeartbeat = Date.now();
+          await runner.save();
+
+          io.emit('runner:status_changed', {
+            runnerId: runner._id,
+            name: runner.name,
+            status: runner.status,
+            usedCpus: runner.usedCpus,
+            usedMemoryMB: runner.usedMemoryMB,
+            cpuCapacity: runner.cpuCapacity,
+            memoryCapacity: runner.memoryCapacity,
+            activeTaskCount: runner.activeTasks.length
+          });
+        }
+
+        // Notify UI/dashboards of task completion
         io.emit('task:status_changed', {
           taskId,
           runnerId,
@@ -162,14 +196,19 @@ function initSocket(server) {
           durationMs
         });
 
-        io.emit('runner:status_changed', {
-          runnerId,
-          status: 'IDLE'
-        });
-
         if (typeof callback === 'function') {
           callback({ message: 'Result acknowledged' });
         }
+
+        // Check if PipelineRun is now complete (SUCCESS or FAILED) and trigger volume cleanup
+        if (updatedTask && updatedTask.pipelineRunId) {
+          await checkAndUpdatePipelineRun(updatedTask.pipelineRunId);
+        }
+
+        // Instantly trigger scheduler loop so other queued/waiting tasks can claim released runner slots
+        const { runScheduler } = require('./scheduler');
+        runScheduler();
+
       } catch (err) {
         console.error('[Socket] Error in task:result:', err);
         if (typeof callback === 'function') callback({ error: 'Failed to save result' });
@@ -188,26 +227,41 @@ function initSocket(server) {
           const runner = await Runner.findById(runnerId);
           if (runner) {
             runner.status = 'OFFLINE';
+            runner.usedCpus = 0;
+            runner.usedMemoryMB = 0;
+            const orphanedTasks = runner.activeTasks || [];
+            runner.activeTasks = [];
+            runner.currentTask = null;
             await runner.save();
 
-            // If it was executing a task, mark it failed so it does not hang forever
-            if (runner.currentTask) {
-              await Task.findByIdAndUpdate(runner.currentTask, {
-                status: 'FAILED',
-                logs: 'Task failed due to runner disconnection.',
-                completedAt: Date.now()
-              });
-              io.emit('task:status_changed', {
-                taskId: runner.currentTask,
-                status: 'FAILED',
-                reason: 'Runner disconnected'
-              });
+            // Mark any orphaned tasks as FAILED
+            if (orphanedTasks.length > 0) {
+              for (const oTaskId of orphanedTasks) {
+                const failedTask = await Task.findByIdAndUpdate(oTaskId, {
+                  status: 'FAILED',
+                  logs: 'Task failed due to runner disconnection.',
+                  completedAt: Date.now()
+                }, { returnDocument: 'after' });
+
+                io.emit('task:status_changed', {
+                  taskId: oTaskId,
+                  status: 'FAILED',
+                  reason: 'Runner disconnected'
+                });
+
+                if (failedTask && failedTask.pipelineRunId) {
+                  await checkAndUpdatePipelineRun(failedTask.pipelineRunId);
+                }
+              }
             }
 
             io.emit('runner:status_changed', {
               runnerId,
               name: runner.name,
-              status: 'OFFLINE'
+              status: 'OFFLINE',
+              usedCpus: 0,
+              usedMemoryMB: 0,
+              activeTaskCount: 0
             });
           }
         } catch (dbErr) {
@@ -232,7 +286,7 @@ function assignTaskToRunner(runnerId, task) {
   if (!io) return false;
   const socketId = runnerSockets.get(runnerId.toString());
   if (socketId) {
-    console.log(`[Socket] Pushing task ${task.name} directly to runner ${runnerId} over WebSocket`);
+    console.log(`[Socket] Pushing task "${task.name}" directly to runner ${runnerId} over WebSocket`);
     io.to(socketId).emit('task:assign', {
       _id: task._id,
       name: task.name,
