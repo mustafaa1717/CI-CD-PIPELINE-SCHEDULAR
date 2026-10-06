@@ -33,32 +33,47 @@ router.post('/github', async (req, res) => {
 
     console.log(`\n[Webhook] Received push event for repo: ${repoUrlStr}, branch: ${branch}, commit: ${commitSha}`);
 
-    // 2. Find the project (most recently saved)
-    let project = await Project.findOne({ 
-      repository: { $regex: new RegExp(repository.name, 'i') }, 
-      branch: branch
-    }).sort({ createdAt: -1 });
+    // 2. Find the project (by repo name or repo URL, regardless of branch)
+    const repoSearchTerm = (repository.name || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    let project = null;
 
-    // Fallback if branch name differs (e.g., master vs main)
-    if (!project) {
+    if (repoSearchTerm) {
       project = await Project.findOne({ 
-        repository: { $regex: new RegExp(repository.name, 'i') }
+        $or: [
+          { repository: { $regex: repoSearchTerm, $options: 'i' } },
+          { name: { $regex: repoSearchTerm, $options: 'i' } }
+        ]
       }).sort({ createdAt: -1 });
     }
 
+    // Fallback: Most recently created project
     if (!project) {
-      console.log(`[Webhook] No project found matching repository ${repository.name}.`);
-      return res.status(404).json({ error: 'Project not found for this repository' });
+      project = await Project.findOne().sort({ createdAt: -1 });
     }
 
-    // 3. Find the pipeline associated with this project (most recently saved)
-    const pipeline = await Pipeline.findOne({ projectId: project._id }).sort({ createdAt: -1 });
+    if (!project) {
+      console.log(`[Webhook] No project found in system. Please configure a pipeline first.`);
+      return res.status(404).json({ error: 'No project configured in CI/CD' });
+    }
+
+    // Update active branch if changed
+    if (project.branch !== branch) {
+      project.branch = branch;
+      await project.save();
+    }
+
+    // 3. Find the pipeline associated with this project (or most recently saved pipeline)
+    let pipeline = await Pipeline.findOne({ projectId: project._id }).sort({ createdAt: -1 });
     if (!pipeline) {
-      console.log(`[Webhook] No pipeline defined for project ${project.name}.`);
-      return res.status(404).json({ error: 'Pipeline not found for project' });
+      pipeline = await Pipeline.findOne().sort({ createdAt: -1 });
     }
 
-    console.log(`[Webhook] Triggering pipeline: ${pipeline.name}`);
+    if (!pipeline) {
+      console.log(`[Webhook] No pipeline defined in system.`);
+      return res.status(404).json({ error: 'Pipeline not found' });
+    }
+
+    console.log(`[Webhook] Triggering pipeline "${pipeline.name}" for commit ${commitSha?.substring(0, 7) || 'latest'} on branch "${branch}"`);
 
     // 4. Parse & Validate YAML and create PipelineRun
     const { validateAndParseDAG } = require('../utils/dagValidator');
