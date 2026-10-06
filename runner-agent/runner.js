@@ -102,7 +102,12 @@ async function startRunner() {
 
     // Real-time task dispatch directly from Backend Scheduler (Multi-task concurrent handler)
     socket.on('task:assign', (task) => {
-      console.log(`[Runner] Received task assignment: "${task.name}" (${task._id})`);
+      const taskIdStr = task._id.toString();
+      if (activeTasks.has(taskIdStr)) {
+        console.warn(`[Runner] Task "${task.name}" (${taskIdStr}) is already actively executing. Ignoring duplicate assignment.`);
+        return;
+      }
+      console.log(`[Runner] Received task assignment: "${task.name}" (${taskIdStr})`);
       // Run asynchronously without blocking the event loop for other tasks
       executeTask(task).catch(err => {
         console.error(`[Runner Error] Error executing task ${task.name}:`, err.message);

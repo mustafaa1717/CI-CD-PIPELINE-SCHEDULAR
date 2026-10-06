@@ -40,13 +40,20 @@ router.post('/:pipelineId/run', async (req, res) => {
     });
     await pipelineRun.save();
 
-    // Map to track created tasks so we can resolve dependencies
-    const taskMap = {}; // { "taskName": TaskObject }
-    const createdTasks = [];
-
-    // First pass: Create all tasks in WAITING state with topological stageLevel
+    const mongoose = require('mongoose');
+    // Pre-allocate ObjectIds for all tasks so dependencies are wired BEFORE saving to DB
+    const idMap = new Map();
     for (const taskDef of validation.tasks) {
-      const task = new Task({
+      idMap.set(taskDef.name, new mongoose.Types.ObjectId());
+    }
+
+    const taskDocs = validation.tasks.map(taskDef => {
+      const depIds = (taskDef.dependsOn || [])
+        .map(depName => idMap.get(depName))
+        .filter(Boolean);
+
+      return {
+        _id: idMap.get(taskDef.name),
         name: taskDef.name,
         command: taskDef.command,
         image: taskDef.image || 'ubuntu:latest',
@@ -54,30 +61,16 @@ router.post('/:pipelineId/run', async (req, res) => {
         requiredMemoryMB: taskDef.memoryMB || 512,
         stageLevel: taskDef.stageLevel || 0,
         pipelineRunId: pipelineRun._id,
+        dependsOn: depIds,
         status: 'WAITING'
-      });
-      await task.save();
-      taskMap[taskDef.name] = task;
-      createdTasks.push({ def: taskDef, dbTask: task });
-    }
+      };
+    });
 
-    // Second pass: Wire up dependencies
-    for (const item of createdTasks) {
-      const { def, dbTask } = item;
-      if (def.dependsOn && def.dependsOn.length > 0) {
-        const depIds = [];
-        for (const depName of def.dependsOn) {
-          if (taskMap[depName]) {
-            depIds.push(taskMap[depName]._id);
-          }
-        }
-        dbTask.dependsOn = depIds;
-        await dbTask.save();
-      }
-    }
+    // Atomic DB insert: Tasks enter MongoDB ALREADY having their dependencies wired
+    await Task.insertMany(taskDocs);
 
     // Link tasks to pipeline run
-    pipelineRun.tasks = createdTasks.map(t => t.dbTask._id);
+    pipelineRun.tasks = taskDocs.map(t => t._id);
     await pipelineRun.save();
 
     // Instantly trigger scheduler loop

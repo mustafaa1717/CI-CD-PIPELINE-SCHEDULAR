@@ -4,7 +4,16 @@ const Runner = require('./models/Runner');
 const { assignTaskToRunner, broadcast, getConnectedRunnerIds } = require('./socket');
 const { checkAndUpdatePipelineRun } = require('./utils/pipelineManager');
 
+let isScheduling = false;
+let queuedSchedule = false;
+
 async function runScheduler() {
+  if (isScheduling) {
+    queuedSchedule = true;
+    return;
+  }
+  isScheduling = true;
+
   try {
     // 0. HEALTH CHECK & GHOST RUNNER CLEANUP:
     // Mark any runner as OFFLINE if its heartbeat is older than 25 seconds
@@ -173,6 +182,12 @@ async function runScheduler() {
 
   } catch (error) {
     console.error('[Scheduler] Error in scheduling loop:', error);
+  } finally {
+    isScheduling = false;
+    if (queuedSchedule) {
+      queuedSchedule = false;
+      setImmediate(runScheduler);
+    }
   }
 }
 

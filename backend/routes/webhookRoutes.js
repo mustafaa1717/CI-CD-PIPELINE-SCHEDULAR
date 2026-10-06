@@ -93,12 +93,20 @@ router.post('/github', async (req, res) => {
     });
     await pipelineRun.save();
 
-    const taskMap = {};
-    const createdTasks = [];
-
-    // Create tasks
+    const mongoose = require('mongoose');
+    // Pre-allocate ObjectIds for all tasks so dependencies are wired BEFORE saving to DB
+    const idMap = new Map();
     for (const taskDef of validation.tasks) {
-      const task = new Task({
+      idMap.set(taskDef.name, new mongoose.Types.ObjectId());
+    }
+
+    const taskDocs = validation.tasks.map(taskDef => {
+      const depIds = (taskDef.dependsOn || [])
+        .map(depName => idMap.get(depName))
+        .filter(Boolean);
+
+      return {
+        _id: idMap.get(taskDef.name),
         name: taskDef.name,
         command: taskDef.command,
         image: taskDef.image || 'ubuntu:latest',
@@ -106,29 +114,16 @@ router.post('/github', async (req, res) => {
         requiredMemoryMB: taskDef.memoryMB || 512,
         stageLevel: taskDef.stageLevel || 0,
         pipelineRunId: pipelineRun._id,
+        dependsOn: depIds,
         status: 'WAITING'
-      });
-      await task.save();
-      taskMap[taskDef.name] = task;
-      createdTasks.push({ def: taskDef, dbTask: task });
-    }
+      };
+    });
 
-    // Wire dependencies
-    for (const item of createdTasks) {
-      const { def, dbTask } = item;
-      if (def.dependsOn && def.dependsOn.length > 0) {
-        const depIds = [];
-        for (const depName of def.dependsOn) {
-          if (taskMap[depName]) {
-            depIds.push(taskMap[depName]._id);
-          }
-        }
-        dbTask.dependsOn = depIds;
-        await dbTask.save();
-      }
-    }
+    // Atomic DB insert: Tasks enter MongoDB ALREADY having their dependencies wired
+    await Task.insertMany(taskDocs);
 
-    pipelineRun.tasks = createdTasks.map(t => t.dbTask._id);
+    // Link tasks to pipeline run
+    pipelineRun.tasks = taskDocs.map(t => t._id);
     await pipelineRun.save();
 
     console.log(`[Webhook] Pipeline Run ${pipelineRun._id} successfully created and queued!`);
