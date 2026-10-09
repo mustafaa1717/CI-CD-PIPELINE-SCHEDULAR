@@ -82,19 +82,19 @@ async function runScheduler() {
         task.status = 'BLOCKED';
         await task.save();
         console.log(`[Scheduler] Task "${task.name}" is BLOCKED due to failed dependencies.`);
-        broadcast('task:status_changed', { taskId: task._id, status: 'BLOCKED' });
+        broadcast('task:status_changed', { taskId: task._id, taskName: task.name, stageLevel: task.stageLevel, status: 'BLOCKED' });
         // Check if this failure causes the parent pipeline to terminate
         await checkAndUpdatePipelineRun(task.pipelineRunId);
       } else if (allDependenciesMet) {
         task.status = 'READY';
         await task.save();
         console.log(`[Scheduler] Task "${task.name}" is now READY.`);
-        broadcast('task:status_changed', { taskId: task._id, status: 'READY' });
+        broadcast('task:status_changed', { taskId: task._id, taskName: task.name, stageLevel: task.stageLevel, status: 'READY' });
       }
     }
 
-    // 2. Assign READY tasks to eligible runners with Multi-Task Resource Awareness
-    const readyTasks = await Task.find({ status: 'READY' }).sort({ createdAt: 1 });
+    // 2. Assign READY tasks to eligible runners with Priority Queue Scheduling (earlier stageLevel first)
+    const readyTasks = await Task.find({ status: 'READY' }).sort({ stageLevel: 1, createdAt: 1 });
     const liveConnectedRunnerIds = getConnectedRunnerIds();
 
     if (readyTasks.length > 0 && liveConnectedRunnerIds.length === 0) {
@@ -159,6 +159,8 @@ async function runScheduler() {
 
         broadcast('task:status_changed', {
           taskId: task._id,
+          taskName: task.name,
+          stageLevel: task.stageLevel,
           status: 'QUEUED',
           runnerId: selectedRunner._id,
           runnerName: selectedRunner.name
