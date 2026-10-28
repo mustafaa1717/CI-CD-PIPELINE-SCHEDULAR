@@ -1,0 +1,413 @@
+STAGE S0
+Problem Definition & Need Identification
+Consolidated Evidence — Steps 1 through 7, in working order
+Team No. 
+18
+Theme No. 
+3
+Artefact Name:
+Dependency & Resource-Aware CI/CD Pipeline Scheduler
+Team Members
+1.
+Mohammed Ansar
+2.
+Mustafa 
+3.
+Nandan 
+4.
+Vihaan
+Guide Name
+Sumayya 
+Kadampur
+ Mam
+Order of Work — What Gets Done First
+This pack is sequenced in the order the work actually happens: understand the problem and its people first, map the current process, translate observations into needs and objectives, then bound the scope and check it's achievable.
+1.  
+The Problem — current situation, observed issue, why existing approach is inadequate
+2.  
+Who Is Involved — stakeholder role, need, difficulty faced, expected benefit
+3.  
+How It Works Today — current process before the proposed system: actors, steps, pain points
+4.  
+Problem & Goals — one concise computing problem, bounded and evidence-supported, plus the objectives it drives
+5.  
+What's Included — in-scope and out-of-scope items; avoid unrealistic feature expansion
+6.  
+Can We Do This — technical/operational feasibility, constraints, and initial risks
+7.  
+What Could Go Wrong — project-level risks and mitigation, revisited at later gates
+THE PROBLEM
+Step 1 of 7 — S0 Problem Definition & Need Identification
+Stage S0 — Problem Definition & Need Identification │ General, Theme-Independent
+Foundational Courses 
+SI.No
+.
+Course
+Core Concepts 
+1.
+Data Structures & Algorithms
+Graphs, DFS, BFS, Topological Sort, Queues, Priority Queues
+2.
+Operating Systems
+Processes, Threads, Scheduling, Concurrency, Resource Management
+3.
+Database Management Systems
+Database Design, Tables, Relationships, Transactions
+4.
+Web Technologies
+Client-Side Validation ,REST/HTTP Communication
+  
+,
+  
+React
+,
+Express,
+ frontend, web application
+5.
+Software Engineering
+Requirements, System Design, Testing, SDLC
+6.
+2. Existing Problem / Current Situation
+Describe the real-world problem or gap as it exists today. What currently happens, and where does it fall short?
+Modern CI/CD systems handle multiple pipelines containing dependent tasks that may need to share a limited number of runners. Tasks must be executed in the correct order, while independent tasks can run in parallel. Efficiently managing dependencies, resources, and runner availability can become complex.
+3. Who Is Affected
+Briefly name the affected users/groups. (Full stakeholder detail belongs in the separate Stakeholder Analysis document.)
+Software developers, DevOps engineers, development teams, and organizations
+ that run multiple CI/CD pipelines and need efficient task execution and resource utilization.
+4. Why the Existing Approach Is Inadequate
+Explain specifically what is missing, slow, error-prone, manual, or unreliable about the current approach.
+Existing CI/CD platforms provide scheduling and execution capabilities, but their internal scheduling logic is generally abstracted from users and is not designed as a configurable environment for studying and comparing scheduling strategies. This makes it difficult to experiment with different scheduling approaches and resource constraints.
+This wording is important because we're 
+not claiming GitHub Actions/Jenkins are inadequate in real-world use
+. They already provide scheduling capabilities. For your project, the gap is the ability to 
+experiment with and evaluate scheduling strategies
+.
+5. Evidence That This Problem Is Real
+List observations, informal surveys, interviews, existing data, or references that support the problem's existence — not assumptions.
+Existing CI/CD platforms demonstrate that dependency management, parallel execution, job queues, and runner/agent assignment are real requirements. For example, GitLab documents jobs running on runners and supports dependency-based execution and parallel jobs. 
+Buildkite
+ also provides pipeline dependencies, parallel steps, agents, and concurrency controls
+6. Sources / References
+Cite where your evidence came from (people consulted, documents reviewed, existing systems observed, etc.).
+GitLab CI/CD Documentation
+ — Jobs, Runners and needs dependencies.
+Buildkite
+ Documentation
+ — Pipeline dependencies, agents and parallel execution.
+💡
+ REMINDER:  
+This document must be dated and completed BEFORE any requirements engineering (S1) work begins — Gate 0 checks this explicitly.
+WHO IS INVOLVED
+Step 2 of 7 — S0 Problem Definition & Need Identification
+Stage S0 — Problem Definition & Need Identification │ General, Theme-Independent
+1. Stakeholder Table
+List every distinct group or role that interacts with, is affected by, or has an interest in this problem/system. Add rows as needed.
+Stakeholder
+Role / Description
+Needs & Expectations
+Current Pain Points
+Influence (H/M/L)
+Developer
+Creates and manages pipelines
+Easy pipeline creation, clear execution status
+Managing dependencies and execution manually can be complex
+H
+DevOps Engineer
+Manages CI/CD infrastructure
+Efficient scheduling and runner utilization
+Multiple tasks competing for limited runners
+H
+Project Team
+Develops and maintains the system
+Reliable execution and monitoring
+Difficult to experiment with scheduling strategies
+M
+System Administrator
+Manages runners and resources
+Resource control and system monitoring
+Resource conflicts and runner availability
+M
+Organization
+Uses CI/CD infrastructure
+Faster and efficient pipeline execution
+Poor resource utilization can increase execution time
+H
+2. Primary vs. Secondary Stakeholders
+Primary: directly use or are directly affected by the system. Secondary: indirectly involved (e.g., administrators, oversight bodies).
+Primary Stakeholders
+Secondary Stakeholders
+Developers
+System Administrators
+DevOps Engineers
+Organization / Management
+Project Team
+Other Development Teams
+3. Key Insight Summary
+In 3–5 sentences, summarize what the stakeholder analysis reveals about whose needs the system must prioritize.
+The analysis shows that developers and DevOps engineers are the primary users of the system. Their main needs are efficient task scheduling, dependency management, suitable runner assignment, and clear execution monitoring. The system should therefore focus on simplifying pipeline scheduling while improving resource utilization and supporting parallel execution.
+💡
+ REMINDER:  
+Every stakeholder listed here should be traceable to at least one requirement in S1.
+HOW IT WORKS TODAY
+Step 3 of 7 — S0 Problem Definition & Need Identification
+Stage S0 — Problem Definition & Need Identification │ General, Theme-Independent
+1. Current Process — Narrative Summary
+Describe, in plain language, how the process/task is currently carried out from start to finish.
+Developers create a CI/CD pipeline by defining tasks and their dependencies. When the pipeline is triggered, the CI/CD platform identifies tasks that are ready to run and assigns them to available runners. Dependent tasks wait until their required tasks are completed, while independent tasks may run in parallel. The platform then updates task statuses and continues until the pipeline is completed.
+2. Step-by-Step Workflow Table
+Break the current process into individual steps. Add or remove rows as needed.
+Step No.
+Actor / Role
+Action Performed
+Tool / System Used
+Pain Point Observed
+1
+Developer
+Creates pipeline and tasks
+CI/CD Platform
+Pipeline configuration can become complex
+2
+Developer
+Defines task dependencies
+CI/CD Platform
+Complex dependencies are difficult to manage
+3
+CI/CD System
+Identifies ready tasks
+CI/CD Scheduler
+Scheduling logic is mostly hidden from users
+4
+CI/CD System
+Assigns tasks to available runners
+Runners / Agents
+Limited runners can create waiting time
+5
+Runner
+Executes assigned task
+Runner Environment
+Resource availability can affect execution
+6
+CI/CD System
+Updates status and triggers next tasks
+CI/CD Platform
+Difficult to experiment with different scheduling strategies
+3. Workflow Diagram
+Attach or paste a flowchart / swim lane diagram of the AS-IS process here (insert image after printing/exporting, or paste into this space in the digital copy).
+4. Bottlenecks & Inefficiencies Identified
+Summarize the key weaknesses in the current workflow that the proposed system should address.
+Complex task dependencies, limited runner availability, task waiting time, resource conflicts, and limited ability to experiment with and compare different scheduling strategies can affect pipeline execution efficiency.
+💡
+ REMINDER:  
+This document proves you understand the existing process before proposing a new one — required as Gate 0 evidence.
+PROBLEM & GOALS
+Step 4 of 7 — S0 Problem Definition & Need Identification
+Stage S0 — Problem Definition & Need Identification 
+│  General
+, Theme-Independent
+1. Observed Problems → Underlying Needs
+For every observed problem, state the evidence/source behind it, the underlying need it points to, and which stakeholder(s) it affects. Add rows as needed.
+Observed Problem
+Evidence / Source
+Underlying Need
+Linked Stakeholder(s)
+Tasks must follow dependencies
+Existing CI/CD workflows
+Dependency-aware scheduling
+Developers, DevOps Engineers
+Limited runners can cause tasks to wait
+Existing CI/CD workflows
+Efficient runner utilization
+DevOps Engineers
+Independent tasks may be executed in parallel
+Existing CI/CD workflows
+Parallel task execution
+Developers, DevOps Engineers
+Resource requirements differ between tasks
+Runner configurations
+Resource-aware task assignment
+DevOps Engineers
+Scheduling decisions are difficult to visualize and compare
+Existing scheduling tools
+Transparent scheduling and performance analysis
+Developers, Project Team
+2. Prioritization
+Rank the needs above by importance/urgency, and briefly justify the ranking.
+ Dependency-aware scheduling 
+ Efficient runner utilization 
+ Resource-aware task assignment 
+ Parallel execution of independent tasks 
+ Scheduling performance analysis
+3. Problem Statement
+State the single, concise computing problem this project solves — bounded, evidence-supported, and free of solution language.
+Develop a system that efficiently schedules tasks from one or more CI/CD pipelines by considering task dependencies, runner availability, resource constraints, and opportunities for parallel execution.
+4. Project Objectives
+State 4–6 clear, measurable objectives this project aims to achieve, based on the needs above. Each should be specific enough to later map to a requirement or deliverable.
+1.  
+Model CI/CD pipelines using tasks and dependency relationships.
+2.  
+Detect invalid or cyclic task dependencies.
+3.  
+Identify and schedule ready tasks based on dependencies.
+ 
+4.  
+Assign tasks to suitable available runners while considering resources.
+5.  
+Measure and visualize scheduling performance such as execution time and runner utilization.
+💡
+ REMINDER:  
+Every need and objective here should map forward into a Functional or Non-Functional Requirement in S1 — keep this page for your Requirements Traceability Matrix later.
+WHAT'S INCLUDED
+Step 5 of 7 — S0 Problem Definition & Need Identification
+Stage S0 — Problem Definition & Need Identification │ General, Theme-Independent
+1. In-Scope
+List what the system WILL do / include within this semester's project.
+#
+In-Scope Item
+1
+Create and manage CI/CD pipelines
+2
+Define tasks and task dependencies
+3
+Build dependency graphs and detect cycles
+4
+Schedule ready tasks using scheduling algorithms
+5
+Assign tasks to available runners based on resources
+6
+Monitor execution and display scheduling analytics
+2. Out-of-Scope
+List what the system explicitly will NOT do / include — this prevents scope creep later.
+#
+Out-of-Scope Item
+Reason for Exclusion
+1
+Building a complete CI/CD platform
+Project focuses on scheduling
+2
+Managing real production infrastructure
+Beyond project scope
+3
+Advanced cloud infrastructure management
+Not required for core scheduler
+4
+Automatic scaling of runners
+Requires additional infrastructure
+5
+Complex enterprise security/authentication
+Not essential for the scheduling problem
+3. Assumptions
+List anything assumed to be true for planning purposes (e.g., available data, user access, environment).
+Users have access to the system and can define valid pipelines, tasks, dependencies, and task resource requirements. A fixed set of runners with known resources is available for scheduling. 
+4. Constraints
+List known limitations — time, team size, technology, data availability, etc.
+C
+omputing resources, and number of available runners. The system will initially focus on dependency and resource-aware scheduling rather than complete enterprise-level CI/CD functionality.
+💡
+ REMINDER:  
+A clear Out-of-Scope list is just as important as In-Scope — reviewers will check both at Gate 0.
+CAN WE DO THIS
+Step 6 of 7 — S0 Problem Definition & Need Identification
+Stage S0 — Problem Definition & Need Identification │ General, Theme-Independent
+1. Technical Feasibility
+Assess whether the team has (or can acquire) the technical skills, tools, and technology needed.
+Aspect
+Assessment
+Justification
+Programming & Algorithms
+Feasible
+Can be implemented using DSA concepts such as graphs, queues, priority queues and topological sorting.
+Backend & Database
+Feasible
+Technologies such as Python/
+FastAPI
+ and SQL/NoSQL databases can support the required system.
+Frontend & Visualization
+Feasible
+A web dashboard can be developed using React or a similar frontend framework.
+Runner & Scheduling Simulation
+Feasible
+Runner resources and task execution can initially be simulated without requiring complex infrastructure.
+2. Operational Feasibility
+Assess whether the proposed system will realistically work within the target environment/users.
+The system can operate as a web-based application where users create pipelines, define dependencies and monitor task scheduling. The dashboard will provide visibility into task status, runner assignment and execution results.
+3. Time Feasibility
+Assess whether the scope is achievable within the semester timeline (15 weeks).
+The project is achievable within the 15-week semester by implementing the core scheduler first, followed by the backend, database, frontend dashboard, testing and analytics. Advanced features can be added only if sufficient time remains.
+4. Resource Feasibility
+Assess team size, skill distribution, and access to any needed data/hardware/software.
+The project requires a small development team with knowledge of programming, DSA, databases and web development. The required software tools are freely available, and the system can initially run on standard student laptops without specialized hardware.
+5. Overall Feasibility Conclusion
+State a clear go / go-with-modifications / no-go conclusion, with reasoning.
+Feasible with controlled scope.
+ The core scheduling system, dependency management, runner assignment and monitoring can be developed within the semester. Advanced CI/CD integrations and infrastructure features will remain optional extensions depending on available time and resources.
+💡
+ REMINDER:  
+Feasibility must be realistic, not optimistic — reviewers will check this against your stated scope and timeline.
+WHAT COULD GO WRONG
+Step 7 of 7 — S0 Problem Definition & Need Identification
+Stage S0 — Problem Definition & Need Identification │ General, Theme-Independent
+1. Project-Level Risks
+Identify risks that could affect the project at this early stage — technical, resource, scope, or timeline related. Add rows as needed.
+Risk ID
+Risk Description
+Category
+Likelihood (H/M/L)
+Impact (H/M/L)
+Mitigation Strategy
+R1
+Scheduling algorithm may become complex
+Technical
+M
+H
+Implement the basic scheduler first and add advanced strategies later
+R2
+Dependency handling may contain logical errors
+Technical
+M
+H
+Use test cases for graphs, dependencies and cycle detection
+R3
+Limited time may affect advanced features
+Timeline
+M
+H
+Prioritize core scheduling features and keep extensions optional
+R4
+Difficulty integrating runners
+Technical
+M
+M
+Start with simulated runners before attempting advanced integration
+R5
+Resource constraints may make scheduling difficult
+Technical
+M
+M
+Define fixed runner resources and validate requirements before assignment
+R6
+Team members may have uneven workload
+Resource
+M
+M
+Divide modules clearly and track progress regularly
+R7
+Database/frontend integration issues
+Technical
+L
+M
+Integrate modules incrementally and test APIs early
+2. Risk Owner Summary
+For each risk above, note which team member is responsible for monitoring it (optional but recommended).
+R1–R2:
+ Algorithm/Backend team
+R3:
+ Project Lead
+R4–R5:
+ Backend/DevOps team
+R6:
+ Project Lead / All team members
+R7:
+ Frontend & Backend team
+💡
+ REMINDER:  
+This is an INITIAL register — it will be revisited and expanded at later gates as the project matures.
