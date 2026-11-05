@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -6,7 +6,6 @@ __pycache__/
 .Python
 *.egg-info/
 dist/
-*.db
 
 # Node
 node_modules/
@@ -25,3 +24,4 @@ package.json
 # OS
 .DS_Store
 Thumbs.db
+

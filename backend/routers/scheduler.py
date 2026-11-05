@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 from typing import List
+import datetime
 
-from .. import models, schemas
+from .. import schemas
 from ..schemas import MultiAllRunRequest
-from ..database import get_db
-from ..services.scheduler_service import run_simulation, compare_algorithms, run_multi_simulation, run_multi_all_simulation
+from ..database import pipelines_col, runners_col, pipeline_runs_col
+from ..models import _next_id, run_to_dict
+from ..services.scheduler_service import (
+    run_simulation, compare_algorithms,
+    run_multi_simulation, run_multi_all_simulation,
+)
 
 router = APIRouter(tags=["scheduler"])
 
@@ -22,14 +26,12 @@ def normalize_algo(algorithm: str) -> str:
     return mapping.get(algorithm, algorithm.lower().replace("-", "_"))
 
 
-# ── IMPORTANT: /run/multi MUST be declared BEFORE /run/{pipeline_id}
-# Otherwise FastAPI will try to parse "multi" as an integer pipeline_id and return 422.
-
+# IMPORTANT: /run/multi-all and /run/multi MUST be declared BEFORE /run/{pipeline_id}
+# Otherwise FastAPI tries to parse "multi" as an integer pipeline_id → 422 error.
 
 @router.post("/run/multi-all")
-def run_multi_all_endpoint(request: MultiAllRunRequest, db: Session = Depends(get_db)):
-    """Run MULTIPLE pipelines with ALL 4 algorithms simultaneously and recommend the best."""
-    result = run_multi_all_simulation(request.pipeline_ids, db)
+def run_multi_all_endpoint(request: MultiAllRunRequest):
+    result = run_multi_all_simulation(request.pipeline_ids)
     if result is None:
         raise HTTPException(status_code=404, detail="No pipelines found or no runners configured")
     if isinstance(result, dict) and "error" in result:
@@ -38,10 +40,9 @@ def run_multi_all_endpoint(request: MultiAllRunRequest, db: Session = Depends(ge
 
 
 @router.post("/run/multi")
-def run_multi_pipeline_endpoint(request: schemas.MultiRunRequest, db: Session = Depends(get_db)):
-    """Run MULTIPLE pipelines simultaneously on shared runners — the core project feature."""
+def run_multi_pipeline_endpoint(request: schemas.MultiRunRequest):
     algo = normalize_algo(request.algorithm)
-    result = run_multi_simulation(request.pipeline_ids, algo, db)
+    result = run_multi_simulation(request.pipeline_ids, algo)
     if result is None:
         raise HTTPException(status_code=404, detail="No pipelines found or no runners configured")
     if isinstance(result, dict) and "error" in result:
@@ -50,10 +51,9 @@ def run_multi_pipeline_endpoint(request: schemas.MultiRunRequest, db: Session = 
 
 
 @router.post("/run/{pipeline_id}")
-def run_pipeline_endpoint(pipeline_id: int, request: schemas.RunRequest, db: Session = Depends(get_db)):
-    """Run a single pipeline."""
+def run_pipeline_endpoint(pipeline_id: int, request: schemas.RunRequest):
     algo = normalize_algo(request.algorithm)
-    result = run_simulation(pipeline_id, algo, db)
+    result = run_simulation(pipeline_id, algo)
     if result is None:
         raise HTTPException(status_code=404, detail="Pipeline not found")
     if isinstance(result, dict) and "error" in result:
@@ -61,67 +61,55 @@ def run_pipeline_endpoint(pipeline_id: int, request: schemas.RunRequest, db: Ses
     return result
 
 
-@router.get("/runs", response_model=List[schemas.PipelineRun])
-def list_runs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return db.query(models.PipelineRun).order_by(
-        models.PipelineRun.id.desc()
-    ).offset(skip).limit(limit).all()
+@router.get("/runs")
+def list_runs(skip: int = 0, limit: int = 100):
+    docs = list(pipeline_runs_col.find({}, {"_id": 0}).sort("id", -1).skip(skip).limit(limit))
+    return [run_to_dict(d) for d in docs]
 
 
 @router.delete("/runs")
-def clear_all_runs(db: Session = Depends(get_db)):
-    """Delete all run history (TaskExecutions + PipelineRuns)."""
-    db.query(models.TaskExecution).delete()
-    db.query(models.PipelineRun).delete()
-    db.commit()
+def clear_all_runs():
+    pipeline_runs_col.delete_many({})
     return {"message": "All run history cleared", "deleted": True}
 
 
-@router.get("/runs/{run_id}", response_model=schemas.PipelineRun)
-def get_run(run_id: int, db: Session = Depends(get_db)):
-    run = db.query(models.PipelineRun).filter(models.PipelineRun.id == run_id).first()
-    if not run:
+@router.get("/runs/{run_id}")
+def get_run(run_id: int):
+    doc = pipeline_runs_col.find_one({"id": run_id}, {"_id": 0})
+    if not doc:
         raise HTTPException(status_code=404, detail="Run not found")
-    return run
+    return run_to_dict(doc)
 
 
 @router.get("/runs/{run_id}/metrics")
-def get_run_metrics(run_id: int, db: Session = Depends(get_db)):
-    run = db.query(models.PipelineRun).filter(models.PipelineRun.id == run_id).first()
-    if not run:
+def get_run_metrics(run_id: int):
+    doc = pipeline_runs_col.find_one({"id": run_id}, {"_id": 0})
+    if not doc:
         raise HTTPException(status_code=404, detail="Run not found")
     return {
-        "makespan":            run.makespan,
-        "avg_wait_time":       run.avg_wait_time,
-        "overall_utilization": run.overall_utilization,
-        "status":              run.status,
+        "makespan":            doc.get("makespan"),
+        "avg_wait_time":       doc.get("avg_wait_time"),
+        "overall_utilization": doc.get("overall_utilization"),
+        "status":              doc.get("status"),
     }
 
 
 @router.get("/runs/{run_id}/status")
-def get_run_status(run_id: int, db: Session = Depends(get_db)):
-    run = db.query(models.PipelineRun).filter(models.PipelineRun.id == run_id).first()
-    if not run:
+def get_run_status(run_id: int):
+    doc = pipeline_runs_col.find_one({"id": run_id}, {"_id": 0})
+    if not doc:
         raise HTTPException(status_code=404, detail="Run not found")
-    tasks = []
-    for te in run.task_executions:
-        task_obj   = db.query(models.Task).filter(models.Task.id == te.task_id).first()
-        runner_obj = db.query(models.Runner).filter(models.Runner.id == te.runner_id).first() if te.runner_id else None
-        tasks.append({
-            "task_id":        te.task_id,
-            "task_name":      task_obj.name if task_obj else str(te.task_id),
-            "runner_id":      te.runner_id,
-            "runner_name":    runner_obj.name if runner_obj else None,
-            "status":         te.status,
-            "wait_time":      te.wait_time,
-            "execution_time": te.execution_time,
-        })
-    return {"run_id": run.id, "run_status": run.status, "makespan": run.makespan, "tasks": tasks}
+    return {
+        "run_id":     doc.get("id"),
+        "run_status": doc.get("status"),
+        "makespan":   doc.get("makespan"),
+        "tasks":      doc.get("task_executions", []),
+    }
 
 
-@router.post("/compare/{pipeline_id}", response_model=List[schemas.ComparisonMetrics])
-def compare_pipeline(pipeline_id: int, db: Session = Depends(get_db)):
-    results = compare_algorithms(pipeline_id, db)
+@router.post("/compare/{pipeline_id}")
+def compare_pipeline(pipeline_id: int):
+    results = compare_algorithms(pipeline_id)
     if results is None:
         raise HTTPException(status_code=404, detail="Pipeline not found or no runners available")
     return results

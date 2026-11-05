@@ -1,72 +1,50 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Float, DateTime
-from sqlalchemy.orm import relationship
-import datetime
-import json
+"""
+MongoDB document helpers.
+No SQLAlchemy — pure pymongo with integer auto-increment IDs
+(stored in a 'counters' collection for simplicity).
+"""
+from pymongo import MongoClient
+from .database import db
 
-from .database import Base
+def _next_id(collection_name: str) -> int:
+    """Auto-increment counter stored in MongoDB."""
+    result = db["counters"].find_one_and_update(
+        {"_id": collection_name},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True,
+    )
+    return result["seq"]
 
-class Pipeline(Base):
-    __tablename__ = "pipelines"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    status = Column(String, default="idle")
+def pipeline_to_dict(doc: dict) -> dict:
+    """Normalize a pipeline doc for API response."""
+    if doc is None:
+        return None
+    doc["id"] = doc.get("id") or doc.get("_id")
+    doc.pop("_id", None)
+    for t in doc.get("tasks", []):
+        if isinstance(t.get("depends_on"), str):
+            import json
+            try:
+                t["depends_on"] = json.loads(t["depends_on"])
+            except Exception:
+                t["depends_on"] = []
+    return doc
 
-    tasks = relationship("Task", back_populates="pipeline")
-    runs = relationship("PipelineRun", back_populates="pipeline")
 
-class Task(Base):
-    __tablename__ = "tasks"
+def runner_to_dict(doc: dict) -> dict:
+    if doc is None:
+        return None
+    doc["id"] = doc.get("id") or doc.get("_id")
+    doc.pop("_id", None)
+    return doc
 
-    id = Column(Integer, primary_key=True, index=True)
-    pipeline_id = Column(Integer, ForeignKey("pipelines.id"))
-    name = Column(String, index=True)
-    duration = Column(Float)
-    priority = Column(Integer)
-    required_cpu = Column(Float)
-    required_ram = Column(Float)
-    status = Column(String, default="pending")
-    depends_on = Column(String, default="[]") # JSON string of list
 
-    pipeline = relationship("Pipeline", back_populates="tasks")
-
-class Runner(Base):
-    __tablename__ = "runners"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, index=True)
-    cpu_cores = Column(Float)
-    ram_gb = Column(Float)
-    is_busy = Column(Boolean, default=False)
-
-class PipelineRun(Base):
-    __tablename__ = "pipeline_runs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    pipeline_id = Column(Integer, ForeignKey("pipelines.id"))
-    algorithm = Column(String)
-    start_time = Column(DateTime, default=datetime.datetime.utcnow)
-    end_time = Column(DateTime, nullable=True)
-    makespan = Column(Float, nullable=True)
-    avg_wait_time = Column(Float, nullable=True)
-    overall_utilization = Column(Float, nullable=True)
-    status = Column(String, default="running")
-
-    pipeline = relationship("Pipeline", back_populates="runs")
-    task_executions = relationship("TaskExecution", back_populates="run")
-
-class TaskExecution(Base):
-    __tablename__ = "task_executions"
-
-    id = Column(Integer, primary_key=True, index=True)
-    run_id = Column(Integer, ForeignKey("pipeline_runs.id"))
-    task_id = Column(Integer, ForeignKey("tasks.id"))
-    runner_id = Column(Integer, ForeignKey("runners.id"), nullable=True)
-    status = Column(String)
-    wait_time = Column(Float)
-    execution_time = Column(Float, nullable=True)
-    start_time = Column(DateTime, nullable=True)
-    end_time = Column(DateTime, nullable=True)
-
-    run = relationship("PipelineRun", back_populates="task_executions")
+def run_to_dict(doc: dict) -> dict:
+    if doc is None:
+        return None
+    doc["id"] = doc.get("id") or doc.get("_id")
+    doc.pop("_id", None)
+    doc.setdefault("task_executions", [])
+    return doc

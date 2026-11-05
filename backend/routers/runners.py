@@ -1,36 +1,36 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, HTTPException
 from typing import List
 
-from .. import models, schemas
-from ..database import get_db
+from .. import schemas
+from ..database import runners_col
+from ..models import _next_id, runner_to_dict
 
-router = APIRouter(
-    prefix="/runners",
-    tags=["runners"],
-)
+router = APIRouter(prefix="/runners", tags=["runners"])
 
-@router.post("/", response_model=schemas.Runner)
-def create_runner(runner: schemas.RunnerCreate, db: Session = Depends(get_db)):
-    db_runner = models.Runner(
-        name=runner.name,
-        cpu_cores=runner.cpu_cores,
-        ram_gb=runner.ram_gb
-    )
-    db.add(db_runner)
-    db.commit()
-    db.refresh(db_runner)
-    return db_runner
 
-@router.get("/", response_model=List[schemas.Runner])
-def read_runners(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    return db.query(models.Runner).offset(skip).limit(limit).all()
+@router.post("/")
+def create_runner(runner: schemas.RunnerCreate):
+    rid = _next_id("runners")
+    doc = {
+        "id": rid,
+        "name": runner.name,
+        "cpu_cores": runner.cpu_cores,
+        "ram_gb": runner.ram_gb,
+        "is_busy": False,
+    }
+    runners_col.insert_one(doc)
+    return runner_to_dict(doc)
+
+
+@router.get("/")
+def read_runners(skip: int = 0, limit: int = 100):
+    docs = list(runners_col.find({}, {"_id": 0}).skip(skip).limit(limit))
+    return [runner_to_dict(d) for d in docs]
+
 
 @router.delete("/{runner_id}")
-def delete_runner(runner_id: int, db: Session = Depends(get_db)):
-    runner = db.query(models.Runner).filter(models.Runner.id == runner_id).first()
-    if not runner:
+def delete_runner(runner_id: int):
+    result = runners_col.delete_one({"id": runner_id})
+    if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Runner not found")
-    db.delete(runner)
-    db.commit()
     return {"message": "Runner deleted"}

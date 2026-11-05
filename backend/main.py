@@ -1,14 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .database import engine, Base
 from .routers import pipelines, runners, scheduler
-
-# Create tables
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="CI/CD Pipeline Scheduler Simulator API")
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,11 +12,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include routers
 app.include_router(pipelines.router)
 app.include_router(runners.router)
 app.include_router(scheduler.router)
 
+
 @app.get("/")
 def root():
-    return {"message": "Welcome to CI/CD Pipeline Scheduler Simulator API"}
+    return {"message": "CI/CD Pipeline Scheduler API — MongoDB backend"}

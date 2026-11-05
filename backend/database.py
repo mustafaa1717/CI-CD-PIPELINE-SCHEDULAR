@@ -1,18 +1,17 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from pymongo import MongoClient
+from pymongo.database import Database
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./sql_app.db"
+MONGO_URL = "mongodb://localhost:27017"
+DB_NAME   = "cicd_scheduler"
 
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+client = MongoClient(MONGO_URL)
+db: Database = client[DB_NAME]
 
-Base = declarative_base()
+# Collections
+pipelines_col    = db["pipelines"]
+runners_col      = db["runners"]
+pipeline_runs_col = db["pipeline_runs"]
 
 def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    """FastAPI dependency — yields the mongo db instance."""
+    yield db
