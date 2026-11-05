@@ -59,6 +59,9 @@ class MultiRunRequest(BaseModel):
     pipeline_ids: List[int]
     algorithm: str
 
+class MultiAllRunRequest(BaseModel):
+    pipeline_ids: List[int]
+
 class TaskExecutionBase(BaseModel):
     task_id: int
     runner_id: Optional[int]

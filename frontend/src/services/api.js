@@ -24,3 +24,5 @@ export const clearRunHistory = () => api.delete('/runs');
 export const compareAlgorithms = (id) => api.post(`/compare/${id}`);
 
 export default api;
+
+export const runMultiAllPipelines = (pipeline_ids) => api.post('/run/multi-all', { pipeline_ids });

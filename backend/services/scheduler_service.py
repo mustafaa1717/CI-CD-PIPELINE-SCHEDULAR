@@ -251,3 +251,100 @@ def run_multi_simulation(pipeline_ids: list, algorithm: str, db: Session):
         "total_pipelines":  len(valid_ids),
         "speed_multiplier": SPEED_MULTIPLIER,   # frontend uses this to scale replay animation
     }
+
+
+def run_multi_all_simulation(pipeline_ids: list, db):
+    """
+    Run multiple pipelines with ALL 4 algorithms simultaneously (in parallel threads).
+    Returns results keyed by algorithm name, plus a 'best' recommendation.
+    """
+    import concurrent.futures
+    import copy as _copy
+
+    db_runners = db.query(models.Runner).all()
+    if not db_runners:
+        return {"error": "NO_RUNNERS", "message": "No runners configured."}
+
+    PIPELINE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+    all_sched_tasks_base = []
+    pipeline_info = {}
+    valid_ids = []
+
+    for i, pid in enumerate(pipeline_ids):
+        db_pipeline = db.query(models.Pipeline).filter(models.Pipeline.id == pid).first()
+        if not db_pipeline:
+            continue
+        valid_ids.append(pid)
+        prefix = f"p{i}_"
+        color = PIPELINE_COLORS[i % len(PIPELINE_COLORS)]
+        pipeline_info[str(pid)] = {"name": db_pipeline.name, "color": color, "prefix": prefix}
+        for t in db_pipeline.tasks:
+            depends_on = json.loads(t.depends_on) if t.depends_on else []
+            all_sched_tasks_base.append(SchedTask(
+                id=f"{prefix}{t.name}",
+                name=t.name,
+                duration=t.duration,
+                priority=t.priority,
+                required_cpu=t.required_cpu,
+                required_ram=t.required_ram,
+                dependencies=[f"{prefix}{dep}" for dep in depends_on]
+            ))
+
+    if not all_sched_tasks_base:
+        return None
+
+    sched_runners_base = [SchedRunner(id=str(r.id), name=r.name, cpu_cores=r.cpu_cores, ram_gb=r.ram_gb) for r in db_runners]
+    runner_id_to_name = {str(r.id): r.name for r in db_runners}
+    SPEED_MULTIPLIER = 5.0
+    all_algos = list(Algorithm)
+
+    def run_one(algo):
+        p_copy = SchedPipeline(id="multi_run", name="Multi", tasks=_copy.deepcopy(all_sched_tasks_base))
+        r_copy = _copy.deepcopy(sched_runners_base)
+        metrics = run_pipeline(p_copy, r_copy, algo, speed_multiplier=SPEED_MULTIPLIER)
+        if "error" in metrics:
+            return algo.value, {"error": True, "message": metrics.get("message"), "makespan": 9999}
+        for td in metrics.get("task_details", []):
+            raw_runner = td.get("assigned_runner")
+            if raw_runner is not None:
+                td["assigned_runner"] = runner_id_to_name.get(str(raw_runner), str(raw_runner))
+            for pid_s, info in pipeline_info.items():
+                if td["id"].startswith(info["prefix"]):
+                    td["pipeline_name"] = info["name"]
+                    td["pipeline_color"] = info["color"]
+                    td["pipeline_id"] = int(pid_s)
+                    break
+        return algo.value, metrics
+
+    results = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        futures = {ex.submit(run_one, algo): algo for algo in all_algos}
+        for future in concurrent.futures.as_completed(futures):
+            key, val = future.result()
+            results[key] = val
+
+    valid = {k: v for k, v in results.items() if not v.get("error")}
+    best_algo = None
+    if valid:
+        best_algo = min(valid, key=lambda k: valid[k].get("makespan", float("inf")))
+
+    if best_algo and valid_ids:
+        best_metrics = valid[best_algo]
+        run_record = models.PipelineRun(
+            pipeline_id=valid_ids[0],
+            algorithm=best_algo,
+            makespan=best_metrics.get("makespan"),
+            avg_wait_time=best_metrics.get("avg_wait_time"),
+            overall_utilization=best_metrics.get("overall_utilization"),
+            status="completed"
+        )
+        db.add(run_record)
+        db.commit()
+
+    return {
+        "results": results,
+        "best_algorithm": best_algo,
+        "pipeline_info": pipeline_info,
+        "pipeline_ids": valid_ids,
+        "speed_multiplier": SPEED_MULTIPLIER,
+    }

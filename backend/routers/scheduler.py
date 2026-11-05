@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List
 
 from .. import models, schemas
+from ..schemas import MultiAllRunRequest
 from ..database import get_db
-from ..services.scheduler_service import run_simulation, compare_algorithms, run_multi_simulation
+from ..services.scheduler_service import run_simulation, compare_algorithms, run_multi_simulation, run_multi_all_simulation
 
 router = APIRouter(tags=["scheduler"])
 
@@ -23,6 +24,18 @@ def normalize_algo(algorithm: str) -> str:
 
 # ── IMPORTANT: /run/multi MUST be declared BEFORE /run/{pipeline_id}
 # Otherwise FastAPI will try to parse "multi" as an integer pipeline_id and return 422.
+
+
+@router.post("/run/multi-all")
+def run_multi_all_endpoint(request: MultiAllRunRequest, db: Session = Depends(get_db)):
+    """Run MULTIPLE pipelines with ALL 4 algorithms simultaneously and recommend the best."""
+    result = run_multi_all_simulation(request.pipeline_ids, db)
+    if result is None:
+        raise HTTPException(status_code=404, detail="No pipelines found or no runners configured")
+    if isinstance(result, dict) and "error" in result:
+        raise HTTPException(status_code=400, detail=result.get("message", "Simulation error"))
+    return result
+
 
 @router.post("/run/multi")
 def run_multi_pipeline_endpoint(request: schemas.MultiRunRequest, db: Session = Depends(get_db)):
