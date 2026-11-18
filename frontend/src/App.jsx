@@ -7,6 +7,10 @@ import RunnerSetup from './pages/RunnerSetup';
 import RunScheduler from './pages/RunScheduler';
 import ComparisonDashboard from './pages/ComparisonDashboard';
 import RunHistory from './pages/RunHistory';
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import Profile from './pages/Profile';
+import { AuthProvider } from './context/AuthContext';
 import { Toaster } from 'react-hot-toast';
 import { AlertTriangle } from 'lucide-react';
 
@@ -40,24 +44,29 @@ class ErrorBoundary extends Component {
 
 function App() {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <ErrorBoundary>
-        <Navbar />
-      </ErrorBoundary>
-      <main style={{ flexGrow: 1, padding: '32px 40px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+    <AuthProvider>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         <ErrorBoundary>
-          <Routes>
-            <Route path="/"               element={<Home />} />
-            <Route path="/pipelines/new"  element={<PipelineBuilder />} />
-            <Route path="/runners"        element={<RunnerSetup />} />
-            <Route path="/run"            element={<RunScheduler />} />
-            <Route path="/compare"        element={<ComparisonDashboard />} />
-            <Route path="/history"        element={<RunHistory />} />
-          </Routes>
+          <Navbar />
         </ErrorBoundary>
-      </main>
-      <Toaster position="bottom-right" />
-    </div>
+        <main style={{ flexGrow: 1, padding: '32px 40px', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/"               element={<Home />} />
+              <Route path="/pipelines/new"  element={<PipelineBuilder />} />
+              <Route path="/runners"        element={<RunnerSetup />} />
+              <Route path="/run"            element={<RunScheduler />} />
+              <Route path="/compare"        element={<ComparisonDashboard />} />
+              <Route path="/history"        element={<RunHistory />} />
+              <Route path="/login"          element={<Login />} />
+              <Route path="/signup"         element={<Signup />} />
+              <Route path="/profile"        element={<Profile />} />
+            </Routes>
+          </ErrorBoundary>
+        </main>
+        <Toaster position="bottom-right" />
+      </div>
+    </AuthProvider>
   );
 }
 

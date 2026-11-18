@@ -328,7 +328,6 @@ export default function RunScheduler() {
       setAllResults(results);
       setBestAlgo(best);
       setPipeInfo(pi);
-      if (best) toast.success('Best: ' + (ALGO_LABELS[best] || best) + ' — lowest makespan!');
 
       const initState = {};
       ALGORITHMS.forEach(a => {
@@ -336,7 +335,7 @@ export default function RunScheduler() {
       });
       setTabState(initState);
       setPhase('replay');
-      setActiveTab(best || 'fcfs');
+      setActiveTab('fcfs');
 
       ALGORITHMS.forEach(a => {
         const m = results[a.id];
@@ -344,7 +343,7 @@ export default function RunScheduler() {
           setTabState(prev => ({ ...prev, [a.id]: { ...prev[a.id], done: true, pct: 100 } }));
           return;
         }
-        beginReplayForAlgo(a.id, m.task_details || [], m.makespan || 1, pi, spd);
+        beginReplayForAlgo(a.id, m.task_details || [], m.makespan || 1, pi, spd, best);
       });
 
     } catch (err) {
@@ -353,7 +352,7 @@ export default function RunScheduler() {
     }
   };
 
-  const beginReplayForAlgo = (algoId, tasks, actualMakespan, pi, speedMult) => {
+  const beginReplayForAlgo = (algoId, tasks, actualMakespan, pi, speedMult, bestWinner) => {
     if (!tasks.length) {
       setTabState(prev => ({ ...prev, [algoId]: { ...prev[algoId], done: true, pct: 100 } }));
       return;
@@ -419,7 +418,13 @@ export default function RunScheduler() {
         setTabState(prev => {
           const next = { ...prev, [algoId]: { replayTasks: updated, runnerState: finalRm, pct: 100, currentTime: visualMs, visualMakespan: visualMs, done: true } };
           const allDone = ALGORITHMS.every(a => next[a.id]?.done);
-          if (allDone) setPhase('done');
+          if (allDone) {
+            setPhase('done');
+            if (bestWinner) {
+              const bestLabel = ALGO_LABELS[bestWinner] || bestWinner;
+              toast.success('Simulation Completed! Recommended Best: ' + bestLabel, { icon: '🏆', duration: 4000 });
+            }
+          }
           return next;
         });
         return;
@@ -615,7 +620,7 @@ export default function RunScheduler() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: a.color }} />
                           <span style={{ fontSize: '13px', fontWeight: '600', color: tabNameColor }}>{a.label}</span>
-                          {isBest && <Trophy size={12} style={{ color: a.color }} />}
+                          {phase === 'done' && isBest && <Trophy size={12} style={{ color: a.color }} />}
                         </div>
                         {makespanLabel
                           ? <span style={{ fontSize: '11px', color: msColor, fontVariantNumeric: 'tabular-nums' }}>{makespanLabel}</span>
@@ -640,12 +645,18 @@ export default function RunScheduler() {
                   <span style={{ color: activeAlgo ? activeAlgo.color : '#888888' }}>{activeAlgo ? activeAlgo.label : ''}</span>
                   {ts.done
                     ? ' — completed in ' + visualMakespan.toFixed(2) + 's'
-                    : ': ' + currentTime.toFixed(1) + 's / ' + visualMakespan.toFixed(1) + 's'}
+                    : ' : ' + currentTime.toFixed(1) + 's running'}
                 </span>
-                <span className="badge badge-blue">{Math.round(pct)}%</span>
+                {ts.done ? (
+                  <span className="badge badge-emerald">Completed</span>
+                ) : (
+                  <span className="badge badge-blue">
+                    {replayTasks.filter(t => t.curStatus === 'SUCCESS' || t.curStatus === 'FAILED').length}/{replayTasks.length} tasks
+                  </span>
+                )}
               </div>
               <div style={{ height: '6px', background: 'rgba(0,0,0,0.5)', borderRadius: '3px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
-                <div style={{ height: '100%', width: pctVal(pct), background: activeAlgo ? activeAlgo.color : '#0070f3', transition: 'width 80ms linear' }} />
+                <div style={{ height: '100%', width: ts.done ? '100%' : pctVal(pct), background: activeAlgo ? activeAlgo.color : '#0070f3', transition: 'width 80ms linear' }} />
               </div>
             </div>
 

@@ -11,6 +11,7 @@ db: Database = client[DB_NAME]
 pipelines_col    = db["pipelines"]
 runners_col      = db["runners"]
 pipeline_runs_col = db["pipeline_runs"]
+users_col        = db["users"]
 
 def get_db():
     """FastAPI dependency — yields the mongo db instance."""
