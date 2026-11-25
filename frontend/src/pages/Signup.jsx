@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User, Mail, Briefcase, Eye, EyeOff, UserPlus, Shield } from 'lucide-react';
+import { Lock, User, AtSign, Mail, Briefcase, Eye, EyeOff, UserPlus, Shield } from 'lucide-react';
 
 const ROLES = [
   'DevOps Engineer',
@@ -72,19 +72,20 @@ export default function Signup() {
               Full Name
             </label>
             <div style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
+              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
                 <User size={16} />
               </div>
               <input
                 type="text"
                 name="full_name"
                 required
+                className="input-icon-left"
                 value={formData.full_name}
                 onChange={handleChange}
                 placeholder="e.g. Jordan Smith"
                 style={{
                   width: '100%',
-                  padding: '10px 14px 10px 40px',
+                  padding: '11px 14px 11px 44px',
                   borderRadius: '8px',
                   background: 'rgba(0,0,0,0.3)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -105,19 +106,20 @@ export default function Signup() {
               Username
             </label>
             <div style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
-                <User size={16} />
+              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
+                <AtSign size={16} />
               </div>
               <input
                 type="text"
                 name="username"
                 required
+                className="input-icon-left"
                 value={formData.username}
                 onChange={handleChange}
                 placeholder="e.g. jsmith_ops"
                 style={{
                   width: '100%',
-                  padding: '10px 14px 10px 40px',
+                  padding: '11px 14px 11px 44px',
                   borderRadius: '8px',
                   background: 'rgba(0,0,0,0.3)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -138,19 +140,20 @@ export default function Signup() {
               Work Email
             </label>
             <div style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
+              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
                 <Mail size={16} />
               </div>
               <input
                 type="email"
                 name="email"
                 required
+                className="input-icon-left"
                 value={formData.email}
                 onChange={handleChange}
                 placeholder="jordan@company.com"
                 style={{
                   width: '100%',
-                  padding: '10px 14px 10px 40px',
+                  padding: '11px 14px 11px 44px',
                   borderRadius: '8px',
                   background: 'rgba(0,0,0,0.3)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -171,16 +174,17 @@ export default function Signup() {
               Role / Designation
             </label>
             <div style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
+              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
                 <Briefcase size={16} />
               </div>
               <select
                 name="role"
                 value={formData.role}
                 onChange={handleChange}
+                className="input-icon-left"
                 style={{
                   width: '100%',
-                  padding: '10px 14px 10px 40px',
+                  padding: '11px 14px 11px 44px',
                   borderRadius: '8px',
                   background: '#090d16',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -203,19 +207,20 @@ export default function Signup() {
               Password
             </label>
             <div style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
+              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
                 <Lock size={16} />
               </div>
               <input
                 type={showPw ? 'text' : 'password'}
                 name="password"
                 required
+                className="input-icon-both"
                 value={formData.password}
                 onChange={handleChange}
                 placeholder="At least 4 characters"
                 style={{
                   width: '100%',
-                  padding: '10px 42px 10px 40px',
+                  padding: '11px 44px 11px 44px',
                   borderRadius: '8px',
                   background: 'rgba(0,0,0,0.3)',
                   border: '1px solid rgba(255,255,255,0.1)',

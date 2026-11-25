@@ -46,25 +46,15 @@ export default function Home() {
     <div style={{ maxWidth: '1100px', margin: '0 auto', animation: 'fade-in 0.4s ease-out' }}>
       <style>{`@keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }`}</style>
       
-      {/* Auth Banner if guest */}
+      {/* Auth Actions if guest */}
       {!isAuthenticated && (
-        <div className="glass-card" style={{ padding: '20px 24px', marginBottom: '28px', border: '1px solid rgba(99,102,241,0.3)', background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(168,85,247,0.05))', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h3 style={{ margin: '0 0 6px 0', fontSize: '16px', fontWeight: '600', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Lock size={18} color="#818cf8" /> Multi-Tenant Authentication Enforced
-            </h3>
-            <p style={{ margin: 0, fontSize: '13px', color: '#cbd5e1', lineHeight: '1.5' }}>
-              Sign in with your DevOps account to isolate and manage your own pipelines, or log in as Admin to oversee the shared cluster.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <Link to="/login" className="btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>
-              <LogIn size={15} /> Sign In
-            </Link>
-            <Link to="/signup" className="btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
-              Create Account
-            </Link>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+          <Link to="/login" className="btn-primary" style={{ padding: '8px 18px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <LogIn size={15} /> Sign In
+          </Link>
+          <Link to="/signup" className="btn-secondary" style={{ padding: '8px 18px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+            Create Account
+          </Link>
         </div>
       )}
 

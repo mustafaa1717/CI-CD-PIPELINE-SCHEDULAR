@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, User, Eye, EyeOff, LogIn, Sparkles, ShieldCheck } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, LogIn, Sparkles, ShieldCheck, Shield } from 'lucide-react';
 
 export default function Login() {
   const [identifier, setIdentifier] = useState('');
@@ -21,6 +21,18 @@ export default function Login() {
 
     if (res.success) {
       navigate('/run');
+    }
+  };
+
+  const handleQuickAdmin = async () => {
+    setLoading(true);
+    let res = await login('admin_devops', 'password123');
+    if (!res.success) {
+      res = await login('admin@cicd.io', 'password123');
+    }
+    setLoading(false);
+    if (res.success) {
+      navigate('/admin');
     }
   };
 
@@ -74,18 +86,19 @@ export default function Login() {
               Username or Email
             </label>
             <div style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
+              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
                 <User size={16} />
               </div>
               <input
                 type="text"
                 required
+                className="input-icon-left"
                 value={identifier}
                 onChange={e => setIdentifier(e.target.value)}
                 placeholder="e.g. devops_lead or alex@company.com"
                 style={{
                   width: '100%',
-                  padding: '11px 14px 11px 40px',
+                  padding: '11px 14px 11px 44px',
                   borderRadius: '8px',
                   background: 'rgba(0,0,0,0.3)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -107,18 +120,19 @@ export default function Login() {
               Password
             </label>
             <div style={{ position: 'relative' }}>
-              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
+              <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b', pointerEvents: 'none', display: 'flex', alignItems: 'center' }}>
                 <Lock size={16} />
               </div>
               <input
                 type={showPw ? 'text' : 'password'}
                 required
+                className="input-icon-both"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
                 style={{
                   width: '100%',
-                  padding: '11px 42px 11px 40px',
+                  padding: '11px 44px 11px 44px',
                   borderRadius: '8px',
                   background: 'rgba(0,0,0,0.3)',
                   border: '1px solid rgba(255,255,255,0.1)',
@@ -166,9 +180,37 @@ export default function Login() {
         {/* Divider */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '24px 0', color: '#475569', fontSize: '12px' }}>
           <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
-          <span>OR</span>
+          <span>QUICK 1-CLICK ACCESS</span>
           <div style={{ flex: 1, height: '1px', background: 'rgba(255,255,255,0.08)' }} />
         </div>
+
+        {/* Quick Admin Sign-in Button */}
+        <button
+          type="button"
+          onClick={handleQuickAdmin}
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: '11px',
+            borderRadius: '8px',
+            background: 'rgba(16,185,129,0.1)',
+            border: '1px solid rgba(16,185,129,0.3)',
+            color: '#34d399',
+            fontSize: '13px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            marginBottom: '10px',
+            transition: 'all 0.2s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.18)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}>
+          <Shield size={16} style={{ color: '#10b981' }} />
+          1-Click Admin Login (Root Administrator)
+        </button>
 
         {/* Quick Demo Sign-in */}
         <button
@@ -194,7 +236,7 @@ export default function Login() {
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(99,102,241,0.15)'}
           onMouseLeave={e => e.currentTarget.style.background = 'rgba(99,102,241,0.08)'}>
           <Sparkles size={16} style={{ color: '#818cf8' }} />
-          1-Click Demo Login (DevOps Lead)
+          1-Click Demo Login (Pipeline Workloads)
         </button>
 
         {/* Footer Link */}
