@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Network, Server, PlayCircle, BarChart3, Clock, GitMerge, User, LogOut, ChevronDown, UserPlus, LogIn } from 'lucide-react';
+import { Network, Server, PlayCircle, BarChart3, Clock, GitMerge, User, LogOut, ChevronDown, UserPlus, LogIn, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-const NAV = [
+const BASE_NAV = [
   { to: '/',              label: 'Pipelines', icon: Network },
   { to: '/pipelines/new', label: 'Builder',   icon: GitMerge },
   { to: '/runners',       label: 'Runners',   icon: Server },
@@ -18,6 +18,10 @@ export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen]   = useState(false);
   const dropdownRef = useRef(null);
+
+  const navItems = user?.is_admin
+    ? [...BASE_NAV, { to: '/admin', label: 'Admin', icon: Shield, adminOnly: true }]
+    : BASE_NAV;
 
   const isActive = (to) => to === '/' ? pathname === '/' : pathname.startsWith(to);
 
@@ -72,7 +76,7 @@ export default function Navbar() {
 
       {/* Nav links */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        {NAV.map(({ to, label, icon: Icon }) => {
+        {navItems.map(({ to, label, icon: Icon, adminOnly }) => {
           const active = isActive(to);
           return (
             <Link key={to} to={to} style={{
@@ -82,13 +86,14 @@ export default function Navbar() {
               borderRadius: '8px',
               fontSize: '13px',
               fontWeight: '500',
-              color: active ? '#ffffff' : '#94a3b8',
-              background: active ? 'rgba(255,255,255,0.08)' : 'transparent',
+              color: active ? '#ffffff' : adminOnly ? '#34d399' : '#94a3b8',
+              background: active ? (adminOnly ? 'rgba(16,185,129,0.15)' : 'rgba(255,255,255,0.08)') : 'transparent',
+              border: adminOnly ? '1px solid rgba(16,185,129,0.2)' : '1px solid transparent',
               transition: 'all 0.2s ease',
             }}
-            onMouseEnter={e => { if (!active) { e.currentTarget.style.color = '#e2e8f0'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; } }}
-            onMouseLeave={e => { if (!active) { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; } }}>
-              <Icon size={15} style={{ opacity: active ? 1 : 0.7 }} />
+            onMouseEnter={e => { if (!active) { e.currentTarget.style.color = adminOnly ? '#6ee7b7' : '#e2e8f0'; e.currentTarget.style.background = adminOnly ? 'rgba(16,185,129,0.1)' : 'rgba(255,255,255,0.04)'; } }}
+            onMouseLeave={e => { if (!active) { e.currentTarget.style.color = adminOnly ? '#34d399' : '#94a3b8'; e.currentTarget.style.background = 'transparent'; } }}>
+              <Icon size={15} style={{ opacity: active ? 1 : 0.8 }} />
               {label}
             </Link>
           );
@@ -164,6 +169,26 @@ export default function Navbar() {
                 </div>
 
                 <div style={{ padding: '6px 0' }}>
+                  {user?.is_admin && (
+                    <Link
+                      to="/admin"
+                      onClick={() => setDropdownOpen(false)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '8px',
+                        padding: '8px 12px',
+                        borderRadius: '6px',
+                        color: '#34d399',
+                        textDecoration: 'none',
+                        fontSize: '13px',
+                        fontWeight: '500',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.1)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                      <Shield size={15} color="#34d399" /> Admin Console
+                    </Link>
+                  )}
+
                   <Link
                     to="/profile"
                     onClick={() => setDropdownOpen(false)}

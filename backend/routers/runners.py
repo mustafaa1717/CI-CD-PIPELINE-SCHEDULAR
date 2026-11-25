@@ -1,15 +1,19 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 
 from .. import schemas
 from ..database import runners_col
 from ..models import _next_id, runner_to_dict
+from .auth import require_admin
 
 router = APIRouter(prefix="/runners", tags=["runners"])
 
 
 @router.post("/")
-def create_runner(runner: schemas.RunnerCreate):
+def create_runner(
+    runner: schemas.RunnerCreate,
+    current_admin: dict = Depends(require_admin),
+):
     rid = _next_id("runners")
     doc = {
         "id": rid,
@@ -29,7 +33,10 @@ def read_runners(skip: int = 0, limit: int = 100):
 
 
 @router.delete("/{runner_id}")
-def delete_runner(runner_id: int):
+def delete_runner(
+    runner_id: int,
+    current_admin: dict = Depends(require_admin),
+):
     result = runners_col.delete_one({"id": runner_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Runner not found")

@@ -41,4 +41,12 @@ export const getRunMetrics       = (runId)         => api.get(`/runs/${runId}/me
 export const clearRunHistory     = ()              => api.delete('/runs');
 export const compareAlgorithms   = (id)            => api.post(`/compare/${id}`);
 
+// ── Admin APIs ───────────────────────────────────────────────────────────────
+export const getAdminStats         = ()              => api.get('/admin/stats');
+export const getAdminUsers         = ()              => api.get('/admin/users');
+export const updateAdminUserRole   = (userId, data)  => api.put(`/admin/users/${userId}/role`, data);
+export const deleteAdminUser       = (userId)        => api.delete(`/admin/users/${userId}`);
+export const getAdminPipelines     = ()              => api.get('/admin/pipelines');
+export const deletePipelineAdmin   = (id)            => api.delete(`/admin/pipelines/${id}`);
+
 export default api;

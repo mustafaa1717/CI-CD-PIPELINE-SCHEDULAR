@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import pipelines, runners, scheduler, auth
+from .routers import pipelines, runners, scheduler, auth, admin
 
 app = FastAPI(title="CI/CD Pipeline Scheduler Simulator API")
 
@@ -16,6 +16,7 @@ app.include_router(auth.router)
 app.include_router(pipelines.router)
 app.include_router(runners.router)
 app.include_router(scheduler.router)
+app.include_router(admin.router)
 
 
 @app.get("/")

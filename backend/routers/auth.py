@@ -60,12 +60,18 @@ def create_access_token(user_id: int, username: str) -> str:
 
 def sanitize_user(user: dict) -> dict:
     """Strip password hash and MongoDB internal ID from response."""
+    is_admin = bool(
+        user.get("is_admin") is True
+        or user.get("role") == "Admin"
+        or user.get("username") == "admin_devops"
+    )
     return {
         "id": user.get("id"),
         "username": user.get("username"),
         "email": user.get("email"),
         "full_name": user.get("full_name") or user.get("username"),
         "role": user.get("role", "DevOps Engineer"),
+        "is_admin": is_admin,
         "avatar_color": user.get("avatar_color", "#6366f1"),
         "created_at": user.get("created_at"),
         "last_login": user.get("last_login"),
@@ -94,6 +100,34 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if not user:
         raise HTTPException(status_code=401, detail="User account not found")
 
+    return user
+
+
+def get_current_user_optional(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """Optional dependency: returns user doc if valid Bearer token provided, else None."""
+    if not authorization:
+        return None
+    parts = authorization.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        return None
+    token = parts[1]
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload["sub"])
+        return users_col.find_one({"id": user_id})
+    except Exception:
+        return None
+
+
+def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Dependency enforcing that current user has administrative rights."""
+    is_admin = bool(
+        user.get("is_admin") is True
+        or user.get("role") == "Admin"
+        or user.get("username") == "admin_devops"
+    )
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Administrative privileges required")
     return user
 
 

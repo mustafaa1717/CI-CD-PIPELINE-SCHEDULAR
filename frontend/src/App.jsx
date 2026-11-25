@@ -10,6 +10,8 @@ import RunHistory from './pages/RunHistory';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Profile from './pages/Profile';
+import AdminDashboard from './pages/AdminDashboard';
+import ProtectedRoute from './components/ProtectedRoute';
 import { AuthProvider } from './context/AuthContext';
 import { Toaster } from 'react-hot-toast';
 import { AlertTriangle } from 'lucide-react';
@@ -53,14 +55,15 @@ function App() {
           <ErrorBoundary>
             <Routes>
               <Route path="/"               element={<Home />} />
-              <Route path="/pipelines/new"  element={<PipelineBuilder />} />
+              <Route path="/pipelines/new"  element={<ProtectedRoute><PipelineBuilder /></ProtectedRoute>} />
               <Route path="/runners"        element={<RunnerSetup />} />
               <Route path="/run"            element={<RunScheduler />} />
               <Route path="/compare"        element={<ComparisonDashboard />} />
               <Route path="/history"        element={<RunHistory />} />
               <Route path="/login"          element={<Login />} />
               <Route path="/signup"         element={<Signup />} />
-              <Route path="/profile"        element={<Profile />} />
+              <Route path="/profile"        element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/admin"          element={<ProtectedRoute adminOnly={true}><AdminDashboard /></ProtectedRoute>} />
             </Routes>
           </ErrorBoundary>
         </main>

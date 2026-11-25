@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { getPipelines, getRunners, runMultiAllPipelines } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
-import { Play, Server, Clock, Activity, CheckCircle, XCircle, Trophy, Zap, BarChart2 } from 'lucide-react';
+import { Play, Server, Clock, Activity, CheckCircle, XCircle, Trophy, Zap, BarChart2, LogIn, Shield } from 'lucide-react';
 
 /* ---- Constants ---- */
 const PIPE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
@@ -262,6 +264,7 @@ function ComparisonPanel({ allResults, bestAlgo, pipelineCount }) {
 
 /* ---- Main Component ---- */
 export default function RunScheduler() {
+  const { user, isAuthenticated } = useAuth();
   const [pipelines,      setPipelines]      = useState([]);
   const [runners,        setRunners]        = useState([]);
   const [selected,       setSelected]       = useState([]);
@@ -272,23 +275,29 @@ export default function RunScheduler() {
   const [activeTab,      setActiveTab]      = useState('fcfs');
   const [tabState,       setTabState]       = useState({});
 
-  const timersRef  = useRef({});
-  const snapRefs   = useRef({});
-  const runnersRef = useRef([]);
+  const timersRef    = useRef({});
+  const snapRefs     = useRef({});
+  const runnersRef   = useRef([]);
+  const doneAlgosRef = useRef(new Set());
 
   useEffect(() => {
     (async () => {
       try {
         const [pr, rr] = await Promise.all([getPipelines(), getRunners()]);
-        setPipelines(pr.data || []);
+        const pipeList = pr.data || [];
+        setPipelines(pipeList);
         setRunners(rr.data || []);
         runnersRef.current = rr.data || [];
+        // Auto-select all available pipelines for quick testing
+        if (pipeList.length > 0) {
+          setSelected(pipeList.map(p => p.id));
+        }
       } catch {
         toast.error('Could not reach backend');
       }
     })();
     return () => Object.values(timersRef.current).forEach(clearInterval);
-  }, []);
+  }, [isAuthenticated]);
 
   const toggle = (id) =>
     setSelected(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -303,12 +312,17 @@ export default function RunScheduler() {
   };
 
   const handleRun = async () => {
+    if (!isAuthenticated) {
+      toast.error('Sign-in required to execute simulations');
+      return;
+    }
     if (!selected.length) { toast.error('Select at least one pipeline'); return; }
     if (!runners.length)  { toast.error('No runners — add them first'); return; }
 
     Object.values(timersRef.current).forEach(clearInterval);
     timersRef.current = {};
     snapRefs.current  = {};
+    doneAlgosRef.current = new Set();
 
     setPhase('running');
     setAllResults({});
@@ -415,18 +429,27 @@ export default function RunScheduler() {
         clearInterval(timersRef.current[algoId]);
         const finalRm = {};
         runnersSnapshot.forEach(r => { finalRm[r.name] = null; });
-        setTabState(prev => {
-          const next = { ...prev, [algoId]: { replayTasks: updated, runnerState: finalRm, pct: 100, currentTime: visualMs, visualMakespan: visualMs, done: true } };
-          const allDone = ALGORITHMS.every(a => next[a.id]?.done);
-          if (allDone) {
-            setPhase('done');
-            if (bestWinner) {
-              const bestLabel = ALGO_LABELS[bestWinner] || bestWinner;
-              toast.success('Simulation Completed! Recommended Best: ' + bestLabel, { icon: '🏆', duration: 4000 });
-            }
+        doneAlgosRef.current.add(algoId);
+
+        setTabState(prev => ({
+          ...prev,
+          [algoId]: {
+            replayTasks: updated,
+            runnerState: finalRm,
+            pct: 100,
+            currentTime: visualMs,
+            visualMakespan: visualMs,
+            done: true,
           }
-          return next;
-        });
+        }));
+
+        if (doneAlgosRef.current.size === ALGORITHMS.length) {
+          setPhase('done');
+          if (bestWinner) {
+            const bestLabel = ALGO_LABELS[bestWinner] || bestWinner;
+            toast.success('Simulation Completed! Recommended Best: ' + bestLabel, { icon: '🏆', duration: 4000 });
+          }
+        }
         return;
       }
       setTabState(prev => ({ ...prev, [algoId]: { ...prev[algoId], replayTasks: updated, runnerState: rm, pct, currentTime: t, visualMakespan: visualMs } }));
@@ -483,9 +506,22 @@ export default function RunScheduler() {
 
           {/* Pipelines */}
           <section>
-            <p style={{ fontSize: '12px', fontWeight: '600', color: '#888888', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px' }}>Pipelines</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <p style={{ fontSize: '12px', fontWeight: '600', color: '#888888', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>Pipelines</p>
+              {user?.is_admin && (
+                <span style={{ fontSize: '11px', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Shield size={12} /> All Accounts
+                </span>
+              )}
+            </div>
             {pipelines.length === 0
-              ? <p style={{ color: '#ef4444', fontSize: '13px' }}>No pipelines.</p>
+              ? (
+                <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', fontSize: '12px', color: '#94a3b8' }}>
+                  {isAuthenticated
+                    ? 'No pipelines found for your account. Create one in Pipeline Builder.'
+                    : 'Sign in to access your registered pipelines.'}
+                </div>
+              )
               : pipelines.map((p, i) => {
                   const clr = PIPE_COLORS[i % PIPE_COLORS.length];
                   const on  = selected.includes(p.id);
@@ -497,8 +533,15 @@ export default function RunScheduler() {
                       border: labelBorder, background: labelBg, transition: 'all 0.2s' }}>
                       <input type="checkbox" checked={on} onChange={() => toggle(p.id)} style={{ accentColor: clr, width: '16px', height: '16px' }} />
                       <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: clr, flexShrink: 0 }} />
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '500', color: nameColor }}>{p.name}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '500', color: nameColor, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                          {p.owner_username && (
+                            <span style={{ fontSize: '10px', color: '#94a3b8', background: 'rgba(255,255,255,0.06)', padding: '1px 5px', borderRadius: '4px', flexShrink: 0 }}>
+                              @{p.owner_username}
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize: '12px', color: '#888888', marginTop: '2px' }}>{p.tasks?.length || 0} tasks</div>
                       </div>
                     </label>
@@ -542,19 +585,25 @@ export default function RunScheduler() {
         </div>
 
         <div style={{ padding: '16px 20px', borderTop: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.02)' }}>
-          <button onClick={handleRun} disabled={isRunning || !selected.length || !runners.length}
-            className="btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
-            {isRunning
-              ? <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                  Running all 4 Algorithms...
-                </span>
-              : <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Play size={16} />
-                  Run &amp; Compare Algorithms
-                </span>
-            }
-          </button>
+          {!isAuthenticated ? (
+            <Link to="/login" className="btn-primary" style={{ width: '100%', justifyContent: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <LogIn size={16} /> Sign In to Run Simulations
+            </Link>
+          ) : (
+            <button onClick={handleRun} disabled={isRunning || !selected.length || !runners.length}
+              className="btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
+              {isRunning
+                ? <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                    Running all 4 Algorithms...
+                  </span>
+                : <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Play size={16} />
+                    Run &amp; Compare Algorithms
+                  </span>
+              }
+            </button>
+          )}
         </div>
       </aside>
 
