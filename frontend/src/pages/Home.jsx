@@ -3,7 +3,7 @@ import { getPipelines, getRunners, deletePipeline } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Network, Server, Play, Plus, Trash2, Shield, User, LogIn, Lock } from 'lucide-react';
+import { Network, Server, Play, Plus, Trash2, Shield, User, LogIn, Lock, Edit3 } from 'lucide-react';
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
@@ -211,6 +211,9 @@ export default function Home() {
                   <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
                     <Link to="/run" className="btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
                       <Play size={14} /> Run
+                    </Link>
+                    <Link to={`/pipelines/edit/${pipe.id}`} className="btn-secondary" style={{ padding: '6px 12px', fontSize: '12px', color: '#a5b4fc', borderColor: 'rgba(99, 102, 241, 0.4)' }}>
+                      <Edit3 size={14} /> Edit
                     </Link>
                     <button onClick={() => handleDelete(pipe.id, pipe.name)} disabled={deleting === pipe.id} className="btn-danger">
                       <Trash2 size={14} /> {deleting === pipe.id ? '...' : 'Del'}

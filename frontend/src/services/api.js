@@ -23,6 +23,7 @@ export const updateProfile = (data) => api.put('/auth/profile', data);
 export const getPipelines       = ()           => api.get('/pipelines');
 export const getPipeline        = (id)         => api.get(`/pipelines/${id}`);
 export const createPipeline     = (data)       => api.post('/pipelines', data);
+export const updatePipeline     = (id, data)   => api.put(`/pipelines/${id}`, data);
 export const deletePipeline     = (id)         => api.delete(`/pipelines/${id}`);
 export const addTaskToPipeline  = (id, task)   => api.post(`/pipelines/${id}/tasks`, task);
 

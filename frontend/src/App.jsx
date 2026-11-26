@@ -56,6 +56,7 @@ function App() {
             <Routes>
               <Route path="/"               element={<Home />} />
               <Route path="/pipelines/new"  element={<ProtectedRoute><PipelineBuilder /></ProtectedRoute>} />
+              <Route path="/pipelines/edit/:id" element={<ProtectedRoute><PipelineBuilder /></ProtectedRoute>} />
               <Route path="/runners"        element={<RunnerSetup />} />
               <Route path="/run"            element={<RunScheduler />} />
               <Route path="/compare"        element={<ComparisonDashboard />} />

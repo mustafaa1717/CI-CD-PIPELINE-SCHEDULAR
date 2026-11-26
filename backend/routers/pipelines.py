@@ -1,6 +1,12 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 import datetime
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from scheduler.models import Task as SchedTask, Pipeline as SchedPipeline
+from scheduler.graph import detect_cycle
 
 from .. import schemas
 from ..database import pipelines_col
@@ -8,6 +14,35 @@ from ..models import _next_id, pipeline_to_dict
 from .auth import get_current_user, get_current_user_optional
 
 router = APIRouter(prefix="/pipelines", tags=["pipelines"])
+
+
+def check_pipeline_cycle(tasks: list) -> tuple:
+    """Validate tasks for circular dependencies before persisting."""
+    sched_tasks = []
+    for t in tasks:
+        name = t.name if hasattr(t, "name") else t.get("name")
+        dur = t.duration if hasattr(t, "duration") else t.get("duration", 1)
+        prio = t.priority if hasattr(t, "priority") else t.get("priority", 5)
+        cpu = t.required_cpu if hasattr(t, "required_cpu") else t.get("required_cpu", 1)
+        ram = t.required_ram if hasattr(t, "required_ram") else t.get("required_ram", 1)
+        deps = (t.depends_on if hasattr(t, "depends_on") else t.get("depends_on")) or []
+        if isinstance(deps, str):
+            import json
+            try:
+                deps = json.loads(deps)
+            except Exception:
+                deps = []
+        sched_tasks.append(SchedTask(
+            id=name,
+            name=name,
+            duration=dur,
+            priority=prio,
+            required_cpu=cpu,
+            required_ram=ram,
+            dependencies=deps,
+        ))
+    p = SchedPipeline(id="cycle_check", name="Check", tasks=sched_tasks)
+    return detect_cycle(p)
 
 
 def is_user_admin(user: Optional[dict]) -> bool:
@@ -25,6 +60,14 @@ def create_pipeline(
     pipeline: schemas.PipelineCreate,
     current_user: dict = Depends(get_current_user),
 ):
+    has_cycle, cycle_path = check_pipeline_cycle(pipeline.tasks)
+    if has_cycle:
+        readable = " → ".join(cycle_path)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot create pipeline: Cyclic dependency detected ({readable}). Cycles create deadlocks."
+        )
+
     pid = _next_id("pipelines")
     now = datetime.datetime.utcnow()
 
@@ -54,6 +97,53 @@ def create_pipeline(
     }
     pipelines_col.insert_one(doc)
     return pipeline_to_dict(doc)
+
+
+@router.put("/{pipeline_id}")
+def update_pipeline(
+    pipeline_id: int,
+    pipeline: schemas.PipelineCreate,
+    current_user: dict = Depends(get_current_user),
+):
+    doc = pipelines_col.find_one({"id": pipeline_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Pipeline not found")
+
+    admin = is_user_admin(current_user)
+    if not admin and doc.get("user_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Forbidden: You can only edit your own pipelines")
+
+    has_cycle, cycle_path = check_pipeline_cycle(pipeline.tasks)
+    if has_cycle:
+        readable = " → ".join(cycle_path)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot update pipeline: Cyclic dependency detected ({readable}). Cycles create deadlocks."
+        )
+
+    tasks = []
+    for t in pipeline.tasks:
+        tid = _next_id("tasks")
+        tasks.append({
+            "id": tid,
+            "pipeline_id": pipeline_id,
+            "name": t.name,
+            "duration": t.duration,
+            "priority": t.priority,
+            "required_cpu": t.required_cpu,
+            "required_ram": t.required_ram,
+            "depends_on": t.depends_on,
+            "status": "pending",
+        })
+
+    update_fields = {
+        "name": pipeline.name,
+        "tasks": tasks,
+        "updated_at": datetime.datetime.utcnow(),
+    }
+    pipelines_col.update_one({"id": pipeline_id}, {"$set": update_fields})
+    updated_doc = pipelines_col.find_one({"id": pipeline_id}, {"_id": 0})
+    return pipeline_to_dict(updated_doc)
 
 
 @router.get("/")
