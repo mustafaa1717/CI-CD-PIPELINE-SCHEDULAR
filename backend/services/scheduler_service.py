@@ -264,9 +264,11 @@ def run_multi_all_simulation(pipeline_ids: list):
 
     # Pick best by minimum makespan
     valid     = {k: v for k, v in results.items() if not v.get("error")}
-    best_algo = None
-    if valid:
-        best_algo = min(valid, key=lambda k: valid[k].get("makespan", float("inf")))
+    if not valid:
+        first_err = next((v.get("message") for v in results.values() if v.get("message")), "Simulation failed: Cycle or runner error detected")
+        return {"error": "SIMULATION_FAILED", "message": first_err}
+
+    best_algo = min(valid, key=lambda k: valid[k].get("makespan", float("inf")))
 
     # Save best run record to MongoDB
     if best_algo and valid_ids:
